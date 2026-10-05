@@ -12,26 +12,55 @@ verifying context per request for the same reason.
 
 import asyncio
 import ssl
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING, Final, Self
 
 import aiohttp
 
 from lemonfiber import _wire
 from lemonfiber.jobs import Ended, Finished, Running
-from lemonfiber.problems import CertificateRefusedError, ConfigurationError, UnreachableError
+from lemonfiber.problems import (
+    CertificateRefusedError,
+    ConfigurationError,
+    LemonfiberError,
+    UnreachableError,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
     from types import TracebackType
 
     from lemonfiber._generated.contract import Envelope, JobEnvelope
-    from lemonfiber.address import Address
+    from lemonfiber.address import Address, Route
     from lemonfiber.credential import Credential
     from lemonfiber.jobs import JobStanding
     from lemonfiber.reads import Read
 
 
 type TlsSetting = aiohttp.Fingerprint | ssl.SSLContext | bool
+
+NOT_PROXIED: Final = "The session given would send through a proxy, and a credential goes to the stack alone, so nothing was sent."
+"""Why a request a caller's session would send through a proxy is refused."""
+
+
+async def unproxied(
+    request: aiohttp.ClientRequest,
+    handler: aiohttp.ClientHandlerType,
+) -> aiohttp.ClientResponse:
+    """Send a request straight to the stack, refusing one the session would send through a proxy.
+
+    A session the caller gave may carry a proxy of its own, or read one from the
+    environment; either would hand the credential to the proxy, in the clear over
+    http. This runs once aiohttp has chosen the proxy and before anything is
+    sent, and as the request's only middleware it also keeps the session's own
+    middlewares from ever seeing the credential.
+    """
+    if request.proxy is not None:
+        raise ConfigurationError(NOT_PROXIED)
+    return await handler(request)
+
+
+STRAIGHT: Final = (unproxied,)
+"""The middlewares every request is sent through: this one, in place of any the session holds."""
 
 
 def tls_for(address: Address) -> TlsSetting:
@@ -51,6 +80,47 @@ def checked(session: aiohttp.ClientSession) -> aiohttp.ClientSession:
     return session
 
 
+async def attempt(
+    session: aiohttp.ClientSession,
+    route: Route,
+    tls: TlsSetting,
+    call: _wire.Call,
+    limit: aiohttp.ClientTimeout,
+) -> _wire.Answer | None:
+    """Send one call over one route, or return nothing where no connection could be made there.
+
+    A route that reaches a named stack by an address it resolved to names the
+    stack in the TLS handshake, and the certificate is checked against that name.
+    A failure is raised once aiohttp's error is let go, since that error holds
+    the request's headers, credential included, and would ride along as the
+    failure's cause.
+    """
+    try:
+        async with session.request(
+            call.method,
+            route.url(call.path),
+            data=call.body,
+            headers={**call.headers, **route.headers()},
+            ssl=tls,
+            server_hostname=route.named,
+            middlewares=STRAIGHT,
+            allow_redirects=False,
+            raise_for_status=False,
+            timeout=limit,
+        ) as response:
+            body = await response.read()
+    except aiohttp.ServerFingerprintMismatch, aiohttp.ClientSSLError:
+        failure: LemonfiberError = CertificateRefusedError(_wire.CERTIFICATE_REFUSED)
+    except aiohttp.ClientConnectorError:
+        return None
+    except aiohttp.ClientError, TimeoutError:
+        failure = UnreachableError(_wire.NOT_ANSWERING)
+    else:
+        headers = {name.lower(): value for name, value in response.headers.items()}
+        return _wire.Answer(response.status, headers, body)
+    raise failure
+
+
 async def exchange(
     session: aiohttp.ClientSession,
     address: Address,
@@ -58,25 +128,16 @@ async def exchange(
     call: _wire.Call,
     limit: aiohttp.ClientTimeout,
 ) -> _wire.Answer:
-    """Send one call and hand back what came back, following no redirect."""
-    try:
-        async with session.request(
-            call.method,
-            address.url(call.path),
-            data=call.body,
-            headers=dict(call.headers),
-            ssl=tls,
-            allow_redirects=False,
-            raise_for_status=False,
-            timeout=limit,
-        ) as response:
-            body = await response.read()
-    except (aiohttp.ServerFingerprintMismatch, aiohttp.ClientSSLError) as refused:
-        raise CertificateRefusedError(_wire.CERTIFICATE_REFUSED) from refused
-    except (aiohttp.ClientError, TimeoutError) as failed:
-        raise UnreachableError(_wire.NOT_ANSWERING) from failed
-    headers = {name.lower(): value for name, value in response.headers.items()}
-    return _wire.Answer(response.status, headers, body)
+    """Send one call over the first route a connection can be made on, following no redirect.
+
+    A route is passed over only where no connection could be made, so nothing
+    was sent; once a connection is made, its outcome is the call's.
+    """
+    for route in address.routes:
+        answer = await attempt(session, route, tls, call, limit)
+        if answer is not None:
+            return answer
+    raise UnreachableError(_wire.NOT_ANSWERING)
 
 
 class AsyncClient:

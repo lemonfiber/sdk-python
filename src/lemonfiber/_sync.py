@@ -16,14 +16,14 @@ import urllib3.exceptions
 
 from lemonfiber import _wire
 from lemonfiber.jobs import Ended, Finished, Running
-from lemonfiber.problems import CertificateRefusedError, UnreachableError
+from lemonfiber.problems import CertificateRefusedError, LemonfiberError, UnreachableError
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Mapping, Sequence
     from types import TracebackType
 
     from lemonfiber._generated.contract import Envelope, JobEnvelope
-    from lemonfiber.address import Address
+    from lemonfiber.address import Address, Route
     from lemonfiber.credential import Credential
     from lemonfiber.jobs import JobStanding
     from lemonfiber.reads import Read
@@ -36,15 +36,30 @@ NOT_VERIFYING: Final = "CERT_NONE"
 """No trust store asked, as a pinned address is held to its pin alone, whatever the store would say."""
 
 
-def pool_for(address: Address, timeout: float) -> urllib3.HTTPConnectionPool:
-    """Return the one connection pool an address is reached through, holding its pin where it has one."""
+type Way = tuple[Route, urllib3.HTTPConnectionPool]
+"""One route to a stack, and the pool its connections are kept in."""
+
+
+def pool_for(address: Address, route: Route, timeout: float) -> urllib3.HTTPConnectionPool:
+    """Return the pool a route is reached through, holding the address's pin where it has one.
+
+    A route that reaches a named stack by an address it resolved to checks the
+    certificate against that name, and names it in the TLS handshake.
+    """
     limit = urllib3.Timeout(total=timeout)
     if address.scheme == "http":
-        return urllib3.HTTPConnectionPool(address.host, address.port, timeout=limit)
+        return urllib3.HTTPConnectionPool(route.host, address.port, timeout=limit)
     if address.pin is None:
-        return urllib3.HTTPSConnectionPool(address.host, address.port, timeout=limit, cert_reqs=VERIFYING)
+        return urllib3.HTTPSConnectionPool(
+            route.host,
+            address.port,
+            timeout=limit,
+            cert_reqs=VERIFYING,
+            assert_hostname=route.named,
+            server_hostname=route.named,
+        )
     return urllib3.HTTPSConnectionPool(
-        address.host,
+        route.host,
         address.port,
         timeout=limit,
         cert_reqs=NOT_VERIFYING,
@@ -52,22 +67,55 @@ def pool_for(address: Address, timeout: float) -> urllib3.HTTPConnectionPool:
     )
 
 
-def exchange(pool: urllib3.HTTPConnectionPool, prefix: str, call: _wire.Call) -> _wire.Answer:
-    """Send one call through a pool and hand back what came back, following no redirect."""
+def ways_to(address: Address, timeout: float) -> list[Way]:
+    """Return every route to a stack, each with its pool, in the order they are tried."""
+    return [(route, pool_for(address, route, timeout)) for route in address.routes]
+
+
+def attempt(way: Way, prefix: str, call: _wire.Call) -> _wire.Answer | None:
+    """Send one call over one route, or return nothing where no connection could be made there.
+
+    A failure is raised once urllib3's error is let go, so nothing of the
+    request, its credential included, rides along as the failure's cause.
+    """
+    route, pool = way
     try:
         response = pool.urlopen(
             call.method,
             prefix + call.path,
             body=call.body,
-            headers=dict(call.headers),
+            headers={**call.headers, **route.headers()},
             retries=False,
         )
-    except urllib3.exceptions.SSLError as refused:
-        raise CertificateRefusedError(_wire.CERTIFICATE_REFUSED) from refused
-    except urllib3.exceptions.HTTPError as failed:
-        raise UnreachableError(_wire.NOT_ANSWERING) from failed
-    headers = {name.lower(): value for name, value in response.headers.items()}
-    return _wire.Answer(response.status, headers, response.data)
+    except urllib3.exceptions.SSLError:
+        failure: LemonfiberError = CertificateRefusedError(_wire.CERTIFICATE_REFUSED)
+    except urllib3.exceptions.NewConnectionError:
+        return None
+    except urllib3.exceptions.HTTPError:
+        failure = UnreachableError(_wire.NOT_ANSWERING)
+    else:
+        headers = {name.lower(): value for name, value in response.headers.items()}
+        return _wire.Answer(response.status, headers, response.data)
+    raise failure
+
+
+def exchange(ways: Sequence[Way], prefix: str, call: _wire.Call) -> _wire.Answer:
+    """Send one call over the first route a connection can be made on, following no redirect.
+
+    A route is passed over only where no connection could be made, so nothing
+    was sent; once a connection is made, its outcome is the call's.
+    """
+    for way in ways:
+        answer = attempt(way, prefix, call)
+        if answer is not None:
+            return answer
+    raise UnreachableError(_wire.NOT_ANSWERING)
+
+
+def close_all(ways: Sequence[Way]) -> None:
+    """Close every pool a client holds."""
+    for _, pool in ways:
+        pool.close()
 
 
 class SyncClient:
@@ -88,7 +136,7 @@ class SyncClient:
         """Hold an address and a credential; nothing is sent until a call is made."""
         self._address = address
         self._credential = credential
-        self._pool = pool_for(address, timeout)
+        self._ways = ways_to(address, timeout)
 
     @property
     def address(self) -> Address:
@@ -96,7 +144,7 @@ class SyncClient:
         return self._address
 
     def _answer(self, call: _wire.Call) -> _wire.Answer:
-        return exchange(self._pool, self._address.prefix, _wire.with_credential(call, self._credential))
+        return exchange(self._ways, self._address.prefix, _wire.with_credential(call, self._credential))
 
     def read(self, read: Read, query: _wire.Query | None = None) -> Envelope:
         """Ask for what a command prints under `--json`."""
@@ -143,7 +191,7 @@ class SyncClient:
 
     def close(self) -> None:
         """Close every connection this client holds."""
-        self._pool.close()
+        close_all(self._ways)
 
     def __enter__(self) -> Self:
         """Return the client, to be closed when the block ends."""
@@ -171,8 +219,8 @@ def admit(
     A household member gives their `name`; the operator gives none. The session's
     credential is what a `SyncClient` is then built with.
     """
-    pool = pool_for(address, timeout)
+    ways = ways_to(address, timeout)
     try:
-        return _wire.admitted_of(exchange(pool, address.prefix, _wire.session_call(password, name)))
+        return _wire.admitted_of(exchange(ways, address.prefix, _wire.session_call(password, name)))
     finally:
-        pool.close()
+        close_all(ways)

@@ -21,7 +21,7 @@ from lemonfiber._generated.contract import (
 )
 from lemonfiber._sync import SyncClient, admit
 from lemonfiber._wire import Admitted, Bundle, Json, Query
-from lemonfiber.address import Address, CertificatePin
+from lemonfiber.address import Address, CertificatePin, Route
 from lemonfiber.credential import CREDENTIAL_HEADER, Credential
 from lemonfiber.envelope import SPOKEN_API_VERSION, expect, parse_envelope, read_envelope
 from lemonfiber.jobs import Ended, Finished, JobStanding, Running
@@ -86,6 +86,7 @@ __all__ = [
     "Read",
     "RefusalCode",
     "RefusedError",
+    "Route",
     "Running",
     "StillRunningError",
     "SyncClient",

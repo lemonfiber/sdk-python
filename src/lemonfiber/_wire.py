@@ -89,12 +89,16 @@ NOT_ADMITTED: Final = (
 
 @dataclass(frozen=True, slots=True)
 class Call:
-    """One request, as every transport sends it."""
+    """One request, as every transport sends it.
+
+    Its headers carry the credential and its body may carry a password, so
+    neither is shown when the call is printed.
+    """
 
     method: str
     path: str
-    headers: Mapping[str, str] = field(default_factory=dict[str, str])
-    body: bytes | None = None
+    headers: Mapping[str, str] = field(default_factory=dict[str, str], repr=False)
+    body: bytes | None = field(default=None, repr=False)
 
 
 @dataclass(frozen=True, slots=True)

@@ -6,6 +6,7 @@ import ipaddress
 import re
 import socket
 import urllib.parse
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Final, override
 
 from lemonfiber.problems import AddressRefusedError
@@ -27,6 +28,9 @@ PORTS: Final = {"http": 80, "https": 443}
 
 SEPARATOR: Final = "/"
 """What separates the segments of a path."""
+
+NAME: Final = re.compile(r"[a-z0-9_]([a-z0-9_-]*[a-z0-9_])?(\.[a-z0-9_]([a-z0-9_-]*[a-z0-9_])?)*\.?")
+"""A host name: labels of letters, digits, hyphens and underscores, as the address's lowercased host spells one."""
 
 PIN: Final = re.compile(r"^[0-9a-f]{64}$")
 """A certificate pin's one written form: SHA-256 over the certificate's DER encoding, lower-case hex."""
@@ -97,6 +101,33 @@ def is_literal(host: str) -> bool:
     return True
 
 
+def bracketed(host: str) -> str:
+    """Write a host as a URL's authority carries it: an IPv6 address in brackets."""
+    return f"[{host}]" if ":" in host else host
+
+
+@dataclass(frozen=True, slots=True)
+class Route:
+    """One way to a stack: where a connection is made, and the name the stack is asked for there."""
+
+    host: str
+    """The host a connection is made to."""
+    base: str
+    """The address every path is joined onto, over this route."""
+    named: str | None = None
+    """The host name given, where `host` is an address that name resolved to when it was given."""
+    authority: str | None = None
+    """What the `Host` header carries, where `host` is not what the address named."""
+
+    def url(self, path: str) -> str:
+        """Return the address of a path on this stack, over this route."""
+        return f"{self.base}{path}"
+
+    def headers(self) -> dict[str, str]:
+        """Return the `Host` header naming the stack as it was given, where this route reaches it by address."""
+        return {} if self.authority is None else {"Host": self.authority}
+
+
 class Address:
     """A stack's base address, and the pin it is held to where it is not on this machine.
 
@@ -106,7 +137,7 @@ class Address:
     every address it resolves to is loopback.
     """
 
-    __slots__ = ("_base", "_host", "_pin", "_port", "_prefix", "_scheme")
+    __slots__ = ("_base", "_host", "_pin", "_port", "_prefix", "_routes", "_scheme")
 
     def __init__(
         self,
@@ -129,14 +160,15 @@ class Address:
             port = parts.port
         except ValueError:
             port = 0
-        if not host or port == 0:
+        if not host or port == 0 or not (is_literal(host) or NAME.fullmatch(host)):
             msg = f"{url!r} is not an address."
             raise AddressRefusedError(msg)
         held = pin if isinstance(pin, CertificatePin) or pin is None else CertificatePin(pin)
         if held is not None and scheme != ENCRYPTED:
             msg = "A pinned address is reached over https: a pin is checked against the certificate TLS presents."
             raise AddressRefusedError(msg)
-        if held is None and not on_this_machine(host, resolver):
+        reached = [host] if held is not None or is_literal(host) else resolved_once(host, resolver)
+        if held is None and not (reached and all(is_loopback(one) for one in reached)):
             msg = (
                 f"{host} is not on this machine, and a stack anywhere else is reached only with its "
                 "certificate pin, given with the address."
@@ -147,8 +179,14 @@ class Address:
         self._port = port if port is not None else PORTS[scheme]
         self._pin = held
         self._prefix = parts.path.rstrip(SEPARATOR)
-        authority = f"[{host}]" if ":" in host else host
-        self._base = f"{scheme}://{authority}:{self._port}{self._prefix}"
+        authority = f"{bracketed(host)}:{self._port}"
+        self._base = f"{scheme}://{authority}{self._prefix}"
+        self._routes = tuple(
+            Route(host, self._base)
+            if one == host
+            else Route(one, f"{scheme}://{bracketed(one)}:{self._port}{self._prefix}", host, authority)
+            for one in reached
+        )
 
     @classmethod
     async def resolved(cls, url: str, *, pin: str | CertificatePin | None = None) -> Address:
@@ -193,6 +231,18 @@ class Address:
         """Return the certificate this address is held to, where it is held to one."""
         return self._pin
 
+    @property
+    def routes(self) -> tuple[Route, ...]:
+        """Return every way to the stack, in the order they are tried.
+
+        A host name given without a pin was resolved when the address was given,
+        and was accepted because every address it resolved to is loopback; those
+        addresses are where connections go, each asking for the stack by its
+        name, so a name that later resolves elsewhere reaches nothing new. A
+        literal address, or any address held to a pin, is its own one route.
+        """
+        return self._routes
+
     def url(self, path: str) -> str:
         """Return the address of a path on this stack."""
         return f"{self._base}{path}"
@@ -202,9 +252,6 @@ class Address:
         return f"Address({self._base!r}, pin={self._pin!r})"
 
 
-def on_this_machine(host: str, resolver: Resolver) -> bool:
-    """Tell whether a host is loopback: a literal loopback address, or a name resolving to nothing else."""
-    if is_literal(host):
-        return is_loopback(host)
-    addresses = list(resolver(host))
-    return bool(addresses) and all(is_loopback(address) for address in addresses)
+def resolved_once(host: str, resolver: Resolver) -> list[str]:
+    """Return every address a name resolves to, once each, in the order the resolver gave them."""
+    return list(dict.fromkeys(resolver(host)))

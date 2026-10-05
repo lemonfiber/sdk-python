@@ -3,10 +3,14 @@
 
 import asyncio
 import ipaddress
-from typing import TYPE_CHECKING
+import traceback
+from typing import TYPE_CHECKING, cast
 
 import aiohttp
 import pytest
+import urllib3
+from multidict import CIMultiDict, CIMultiDictProxy
+from yarl import URL
 
 from lemonfiber import (
     CREDENTIAL_HEADER,
@@ -20,6 +24,8 @@ from lemonfiber import (
     CredentialRefusedError,
     Read,
     SyncClient,
+    UnreachableError,
+    _wire,
     admit_async,
 )
 from tests.conftest import PRINTED
@@ -182,6 +188,67 @@ def test_a_literal_with_a_zone_is_read_as_its_address() -> None:
         Address("http://[fe80::1%25en0]:8080")
 
 
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://127.0.0.1%25.evil.test:8080",
+        "http://localhost%25en0:8080",
+        "http://127.0.0.1%25en0:8080",
+        "http://local host:8080",
+        "http://stack!.test:8080",
+    ],
+)
+def test_a_zone_or_any_other_mark_on_a_name_is_refused(url: str) -> None:
+    with pytest.raises(AddressRefusedError) as refused:
+        Address(url, resolver=resolving("127.0.0.1"))
+    assert str(refused.value) == NOT_AN_ADDRESS.format(url=repr(url))
+
+
+def test_a_zone_is_honoured_on_an_ipv6_literal() -> None:
+    address = Address("http://[::1%25en0]:8080")
+    assert address.host == "::1%25en0"
+
+
+def test_a_name_with_hyphens_underscores_and_a_final_dot_is_a_name() -> None:
+    address = Address("http://my-stack_1.test.:8080", resolver=resolving("127.0.0.1"))
+    assert address.host == "my-stack_1.test."
+
+
+def port_of(stack: Stack) -> str:
+    """Return the port a stand-in listens on."""
+    return stack.url.rsplit(":", 1)[1]
+
+
+def test_a_named_address_is_reached_where_it_resolved_when_given(flavour: Flavour, stack: Stack) -> None:
+    stack.reply("GET", "/api/status", Reply(body=STATUS))
+    address = Address(f"http://stack.invalid:{port_of(stack)}", resolver=resolving("127.0.0.1"))
+    driver = connect(flavour, address, Credential(PRINTED))
+    assert driver.read(Read.STATUS) == STATUS
+    driver.close()
+    [arrived] = stack.arrived
+    assert arrived.headers["Host"] == f"stack.invalid:{port_of(stack)}"
+
+
+def test_a_named_address_tries_each_loopback_address_it_resolved_to(flavour: Flavour, stack: Stack) -> None:
+    stack.reply("GET", "/api/status", Reply(body=STATUS))
+    address = Address(f"http://stack.invalid:{port_of(stack)}", resolver=resolving("::1", "127.0.0.1"))
+    driver = connect(flavour, address, Credential(PRINTED))
+    assert driver.read(Read.STATUS) == STATUS
+    driver.close()
+
+
+def test_a_named_address_none_of_whose_addresses_answers_is_unreachable(
+    flavour: Flavour,
+    stack: Stack,
+) -> None:
+    address = Address(f"http://stack.invalid:{port_of(stack)}", resolver=resolving("::1"))
+    driver = connect(flavour, address, Credential(PRINTED))
+    with pytest.raises(UnreachableError):
+        driver.read(Read.STATUS)
+    driver.close()
+    assert stack.arrived == []
+
+
 @pytest.mark.parametrize("secret", ["", "has space", "line\nbreak", "tab\t", "naïve"])
 def test_a_credential_a_header_cannot_carry_is_refused(secret: str) -> None:
     with pytest.raises(CredentialRefusedError) as refused:
@@ -217,6 +284,7 @@ def test_another_certificate_is_refused_before_anything_is_sent(flavour: Flavour
     with pytest.raises(CertificateRefusedError) as refused:
         driver.read(Read.STATUS)
     assert str(refused.value) == CERTIFICATE_REFUSED
+    assert carries_nothing_of(refused.value, PRINTED)
     driver.close()
     assert tls_stack.arrived == []
 
@@ -273,6 +341,116 @@ def test_a_callers_session_is_used_and_left_open(stack: Stack) -> None:
 
     assert asyncio.run(use())
     assert stack.arrived[0].headers["User-Agent"] == "the-caller"
+
+
+NOT_PROXIED = "The session given would send through a proxy, and a credential goes to the stack alone, so nothing was sent."
+
+
+def proxied_session(stack: Stack, *, through: str) -> aiohttp.ClientSession:
+    """Open a session that sends through the stand-in as its proxy, by a default or by the environment."""
+    if through == "default":
+        return aiohttp.ClientSession(proxy=stack.url)
+    return aiohttp.ClientSession(trust_env=True)
+
+
+@pytest.mark.parametrize("through", ["default", "environment"])
+def test_a_callers_session_that_would_send_through_a_proxy_is_refused_before_anything_is_sent(
+    stack: Stack,
+    monkeypatch: pytest.MonkeyPatch,
+    through: str,
+) -> None:
+    stack.reply("GET", "/api/status", Reply(body=STATUS))
+    monkeypatch.setenv("HTTP_PROXY", stack.url)
+    monkeypatch.setenv("NO_PROXY", "")
+    address = Address(f"http://localhost:{port_of(stack)}", resolver=resolving("127.0.0.1"))
+
+    async def use() -> None:
+        session = proxied_session(stack, through=through)
+        try:
+            async with AsyncClient(address, Credential(PRINTED), session=session) as client:
+                await client.read(Read.STATUS)
+        finally:
+            await session.close()
+            await asyncio.sleep(0)
+
+    with pytest.raises(ConfigurationError) as refused:
+        asyncio.run(use())
+    assert str(refused.value) == NOT_PROXIED
+    assert stack.arrived == []
+
+
+def test_a_callers_session_keeps_its_middlewares_from_what_the_client_sends(stack: Stack) -> None:
+    stack.reply("GET", "/api/status", Reply(body=STATUS))
+    seen: list[str] = []
+
+    async def watching(
+        request: aiohttp.ClientRequest,
+        handler: aiohttp.ClientHandlerType,
+    ) -> aiohttp.ClientResponse:
+        seen.append(request.headers.get(CREDENTIAL_HEADER, ""))
+        return await handler(request)
+
+    async def use() -> None:
+        session = aiohttp.ClientSession(middlewares=(watching,))
+        try:
+            async with AsyncClient(Address(stack.url), Credential(PRINTED), session=session) as client:
+                await client.read(Read.STATUS)
+        finally:
+            await session.close()
+            await asyncio.sleep(0)
+
+    asyncio.run(use())
+    assert seen == []
+    assert stack.arrived[0].headers[CREDENTIAL_HEADER] == PRINTED
+
+
+def test_a_proxy_in_the_environment_is_never_used(
+    flavour: Flavour,
+    stack: Stack,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stack.reply("GET", "/api/status", Reply(body=STATUS))
+    monkeypatch.setenv("HTTP_PROXY", "http://127.0.0.1:9")
+    monkeypatch.setenv("HTTPS_PROXY", "http://127.0.0.1:9")
+    monkeypatch.setenv("NO_PROXY", "")
+    driver = connect(flavour, Address(stack.url), Credential(PRINTED))
+    assert driver.read(Read.STATUS) == STATUS
+    driver.close()
+
+
+def carries_nothing_of(error: BaseException, secret: str) -> bool:
+    """Tell whether an error, everything chained to it and its printed trace are free of a secret."""
+    printed = "".join(traceback.format_exception(error))
+    return error.__cause__ is None and error.__context__ is None and secret not in printed + repr(error)
+
+
+def test_a_failure_carries_nothing_of_the_request_that_met_it(
+    flavour: Flavour,
+    stack: Stack,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def failing_sync(*_arguments: object, **options: object) -> object:
+        said = "cut"
+        raise urllib3.exceptions.ProtocolError(said, options["headers"])
+
+    async def failing_async(_session: object, method: str, url: str, **options: object) -> object:
+        sent = CIMultiDictProxy(CIMultiDict(cast("dict[str, str]", options["headers"])))
+        asked = aiohttp.RequestInfo(URL(url), method, sent, URL(url))
+        raise aiohttp.ClientResponseError(asked, (), status=400, message="Invalid header")
+
+    monkeypatch.setattr(urllib3.HTTPConnectionPool, "urlopen", failing_sync)
+    monkeypatch.setattr(aiohttp.ClientSession, "_request", failing_async)
+    driver = connect(flavour, Address(stack.url), Credential(PRINTED))
+    with pytest.raises(UnreachableError) as failed:
+        driver.read(Read.STATUS)
+    driver.close()
+    assert carries_nothing_of(failed.value, PRINTED)
+
+
+def test_a_call_shows_nothing_of_its_credential() -> None:
+    call = _wire.with_credential(_wire.read_call(Read.STATUS, None), Credential(PRINTED))
+    assert PRINTED not in repr(call)
+    assert PRINTED not in str(call)
 
 
 def test_the_door_takes_a_callers_session(stack: Stack) -> None:
