@@ -1,5 +1,5 @@
 # Copyright (c) 2026 NightWorksIO
-"""The lemonfiber contract's shapes, generated from the artefact at 4eca083b55fa27b07edfdf93f69a45a4885514a6.
+"""The lemonfiber contract's shapes, generated from the artefact at 4c472dfc80623bec04cf57df2326c7bde8f7c06e.
 
 Do not edit: `just generate` rewrites this file from `contract/web-api.contract.json`,
 and CI fails on any difference.
@@ -2022,7 +2022,7 @@ class ImportReport(typing.TypedDict):
 
 
 type Installed = typing.Literal[
-    "homebrew", "scoop", "winget", "cargo", "distribution", "installer", "elsewhere", "untellable"
+    "homebrew", "scoop", "winget", "cargo", "distribution", "installer", "elsewhere", "image", "untellable"
 ]
 """How this copy of lemonfiber got onto the machine.
 
@@ -3704,6 +3704,15 @@ class PluginPlaced(typing.TypedDict):
 
     Defaulted for a record written before this was kept, which lists it by its id
     rather than leaving it off the panel.
+    """
+    networks: typing.NotRequired[list[str]]
+    """The stack's own networks it joins beside the default one, because a stack service
+    it stands in for is on them.
+
+    Settled at install from the stack it was installed beside and written down, so
+    the container lemonfiber writes for it stays a function of this record alone.
+    Defaulted for a record written before this was kept, which reads as joining none
+    and staying on the default network.
     """
     provides: typing.NotRequired[list[str]]
     """Every core capability this one service fills, which is what makes it a candidate
@@ -6757,7 +6766,9 @@ class UpdateReport(typing.TypedDict):
     installed: Installed
     """How this copy got onto the machine."""
     instead: typing.NotRequired[str | None]
-    """Why there is nothing exact to type, where there is not."""
+    """Why there is nothing exact to type, where there is not; or, where typing the
+    command is not the whole of the move, what has to follow it.
+    """
     offered: typing.NotRequired[str | None]
     """The newest version released, where the check could read one."""
     owner: typing.NotRequired[str | None]
