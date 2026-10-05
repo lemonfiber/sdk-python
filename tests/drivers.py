@@ -6,7 +6,8 @@ from typing import TYPE_CHECKING, Literal, Protocol
 
 import aiohttp
 
-from lemonfiber import AsyncClient, CertificateRefusedError, SyncClient, admit, admit_async
+from lemonfiber import AsyncClient, SyncClient, admit, admit_async
+from lemonfiber.address import ENCRYPTED
 
 if TYPE_CHECKING:
     from collections.abc import Coroutine, Mapping
@@ -27,7 +28,7 @@ if TYPE_CHECKING:
     from lemonfiber.contract import JobEnvelope
 
 SETTLE = 0.25
-"""Seconds a loop is given, before it is closed, to finish closing a connection a refused certificate left."""
+"""Seconds a loop is given, before it is closed, to finish the closing exchange of its encrypted connections."""
 
 type Flavour = Literal["async", "sync"]
 FLAVOURS: tuple[Flavour, ...] = ("async", "sync")
@@ -129,20 +130,18 @@ class AsyncDriver:
         runner: asyncio.Runner,
         client: AsyncClient,
         given: aiohttp.ClientSession | None,
+        *,
+        encrypted: bool,
     ) -> None:
-        """Hold the loop, the client, and the session the test gave it, if it gave one."""
+        """Hold the loop, the client, the session the test gave it if it gave one, and whether it speaks TLS."""
         self.runner = runner
         self.client = client
         self.given = given
-        self.refused = False
+        self.encrypted = encrypted
 
     def run[T](self, call: Coroutine[object, object, T]) -> T:
-        """Run one call to completion, noting a refused certificate so its connection is let finish closing."""
-        try:
-            return self.runner.run(call)
-        except CertificateRefusedError:
-            self.refused = True
-            raise
+        """Run one call to completion."""
+        return self.runner.run(call)
 
     def read(self, read: Read, query: Query | None = None) -> Envelope:
         """Read."""
@@ -183,7 +182,7 @@ class AsyncDriver:
         self.runner.run(self.client.aclose())
         if self.given is not None:
             self.runner.run(self.given.close())
-        if self.refused:
+        if self.encrypted:
             self.runner.run(asyncio.sleep(SETTLE))
         self.runner.close()
 
@@ -209,7 +208,8 @@ def connect(
         return SyncDriver(SyncClient(address, credential, timeout=timeout))
     runner = asyncio.Runner()
     given = runner.run(opened_session(verifying=False)) if session else None
-    return AsyncDriver(runner, AsyncClient(address, credential, session=given, timeout=timeout), given)
+    client = AsyncClient(address, credential, session=given, timeout=timeout)
+    return AsyncDriver(runner, client, given, encrypted=address.scheme == ENCRYPTED)
 
 
 def admitted(flavour: Flavour, address: Address, password: str, name: str | None = None) -> Admitted:
@@ -219,6 +219,6 @@ def admitted(flavour: Flavour, address: Address, password: str, name: str | None
     with asyncio.Runner() as runner:
         try:
             return runner.run(admit_async(address, password, name=name))
-        except CertificateRefusedError:
-            runner.run(asyncio.sleep(SETTLE))
-            raise
+        finally:
+            if address.scheme == ENCRYPTED:
+                runner.run(asyncio.sleep(SETTLE))
