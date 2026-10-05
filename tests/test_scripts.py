@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from scripts import backward_compat, contract_sync, mutation_score
+from scripts import backward_compat, contract_sync, mutation_score, what_the_bump_takes
 
 if TYPE_CHECKING:
     import pathlib
@@ -221,3 +221,48 @@ def test_no_breakage_against_a_pin_passes(tmp_path: pathlib.Path, monkeypatch: p
 
     monkeypatch.setattr(backward_compat, "breakages", breaking_nothing)
     assert backward_compat.run(spec_with(tmp_path, MAP), tmp_path, recording(REVISION)) == 0
+
+
+def test_a_bump_takes_what_sync_and_generation_wrote(capsys: pytest.CaptureFixture[str]) -> None:
+    status = " M contract/VERSION\0?? src/lemonfiber/_generated/more.py\0M  contract/web-api.contract.json\0"
+    assert what_the_bump_takes.run(status) == 0
+    assert capsys.readouterr().out == (
+        "contract/VERSION\ncontract/web-api.contract.json\nsrc/lemonfiber/_generated/more.py\n"
+    )
+
+
+@pytest.mark.parametrize(
+    ("status", "said"),
+    [
+        (" M .github/workflows/ci.yml\0", "changed outside what a bump takes: .github/workflows/ci.yml"),
+        ("?? README.md\0", "changed outside what a bump takes: README.md"),
+        (" M contract-notes.txt\0", "changed outside what a bump takes: contract-notes.txt"),
+        (
+            " D contract/VERSION\0",
+            "deleted contract/VERSION, and the commit a bump makes carries additions only",
+        ),
+        (
+            "D  contract/VERSION\0",
+            "deleted contract/VERSION, and the commit a bump makes carries additions only",
+        ),
+        (
+            "R  contract/new\0.github/workflows/ci.yml\0",
+            "moved .github/workflows/ci.yml to contract/new, and the commit a bump makes carries additions only",
+        ),
+        (
+            "UU contract/VERSION\0",
+            "contract/VERSION stands as 'UU' in git's status, which syncing and generating never leave",
+        ),
+        ("?? contract/a\nb\0", 'a name that is not one printable line: "contract/a\\nb"'),
+        ("", "nothing changed on disk, so there is nothing to commit"),
+    ],
+)
+def test_a_bump_refuses_any_change_it_does_not_make(
+    capsys: pytest.CaptureFixture[str],
+    status: str,
+    said: str,
+) -> None:
+    assert what_the_bump_takes.run(f" M contract/VERSION\0{status}" if status else status) == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == f"::error::{said}\n"

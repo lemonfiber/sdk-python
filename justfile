@@ -40,7 +40,7 @@ coverage:
 
 # Rewrite `src/lemonfiber/_generated/` from the vendored contract.
 generate:
-    uv run python scripts/contract_generate.py
+    uv run python -m scripts.contract_generate
     uv run ruff format src/lemonfiber/_generated
 
 # Regenerate and fail on any difference from what is committed.
@@ -49,7 +49,7 @@ contract-check: generate
 
 # The contract at a release tag or full commit hash of lemonfiber, vendored into `contract/`.
 sync revision:
-    uv run python scripts/contract_sync.py {{revision}}
+    uv run python -m scripts.contract_sync {{revision}}
 
 # Mutation testing and the minimum score. Slow: CI runs it on every pull request.
 mutation:

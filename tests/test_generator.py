@@ -9,7 +9,7 @@ import typing
 import pytest
 
 from scripts import contract_generate
-from scripts.contract_generate import OUT, ArtefactRefusedError, generate, run
+from scripts.contract_generate import OUT, STAMP, ArtefactRefusedError, generate, run
 
 if typing.TYPE_CHECKING:
     import types
@@ -45,7 +45,7 @@ def artefact(kinds: dict[str, object], refusals: object = None, version: object 
     return whole
 
 
-def write(root: pathlib.Path, whole: object, stamp: str | None = "abc123") -> None:
+def write(root: pathlib.Path, whole: object, stamp: str | None = "v1.0.0") -> None:
     """Vendor an artefact under `root` as `contract/` holds one."""
     (root / "contract").mkdir(parents=True, exist_ok=True)
     (root / "contract" / "web-api.contract.json").write_text(json.dumps(whole), encoding="utf-8")
@@ -74,7 +74,7 @@ def generated(tmp_path: pathlib.Path, whole: object) -> types.ModuleType:
 def refusal(whole: dict[str, object]) -> str:
     """Return the sentence generation refuses an artefact with."""
     with pytest.raises(ArtefactRefusedError) as refused:
-        generate(whole, "abc123")
+        generate(whole, "v1.0.0")
     return str(refused.value)
 
 
@@ -307,7 +307,7 @@ def test_a_described_reference_is_ordinary_company() -> None:
         "type": "object",
         "properties": {"v": {"$ref": "#/$defs/Code", "description": "d", "default": None}},
     }
-    generate(artefact({"a": kind({"$ref": "#/$defs/R"}, {"R": described, "Code": CODE})}), "abc123")
+    generate(artefact({"a": kind({"$ref": "#/$defs/R"}, {"R": described, "Code": CODE})}), "v1.0.0")
 
 
 @pytest.mark.parametrize("name", ["Kind", "Envelope", "KINDS", "RefusalCode", "AEnvelope"])
@@ -365,7 +365,7 @@ def test_a_shape_this_generator_cannot_read_is_refused_rather_than_guessed(schem
     assert said in refusal(artefact({"a": kind(schema, {})}))
 
 
-@pytest.mark.parametrize("name", ["lower", "Not-A-Name", "None2-"])
+@pytest.mark.parametrize("name", ["lower", "Not-A-Name", "None2-", "Code\n"])
 def test_a_definition_python_cannot_name_is_refused(name: str) -> None:
     said = refusal(artefact({"a": kind({"$ref": f"#/$defs/{name}"}, {name: CODE})}))
     assert f"`{name}`, defined by `a`, is not a name a Python type can carry" in said
@@ -414,6 +414,66 @@ def test_an_envelope_field_python_cannot_spell_is_refused() -> None:
 )
 def test_a_refusal_this_generator_cannot_write_is_refused(refusals: object, said: str) -> None:
     assert said in refusal(artefact({"pull": kind({"type": "string"})}, refusals))
+
+
+HOSTILE = 'x"""\nraise SystemExit("ran")\n"""'
+"""Text that ends a docstring and runs a statement, were it written unescaped."""
+
+
+@pytest.mark.parametrize(
+    "said",
+    [
+        HOSTILE,
+        'ends on a quote"',
+        "ends on a backslash\\",
+        '""""""',
+        "a carriage\rreturn and a nul\x00",
+        "a line separator\u2028inside",
+    ],
+)
+def test_a_description_reads_back_as_written_and_runs_nothing(tmp_path: pathlib.Path, said: str) -> None:
+    shape = {
+        "description": said,
+        "type": "object",
+        "properties": {"inside": {"type": "string", "description": said}},
+    }
+    keyed = {"description": said, "type": "object", "properties": {"from": {"type": "string"}}}
+    alias = {"description": said, "type": "string"}
+    definitions: dict[str, object] = {"Shape": shape, "Keyed": keyed, "Alias": alias}
+    data = {
+        "type": "object",
+        "properties": {
+            "a": {"$ref": "#/$defs/Shape"},
+            "b": {"$ref": "#/$defs/Keyed"},
+            "c": {"$ref": "#/$defs/Alias"},
+        },
+    }
+    module = generated(tmp_path, artefact({"pull": kind(data, definitions)}))
+    assert (module.Shape.__doc__ or "").rstrip("\n") == said
+
+
+@pytest.mark.parametrize("name", ["Pull", "1pull", "", "pull door", "pull.door", "pull\n", HOSTILE])
+def test_a_kind_python_cannot_carry_is_refused(name: str) -> None:
+    said = refusal(artefact({name: kind({"type": "string"})}))
+    assert f"the kind {json.dumps(name)} is not lowercase letters, digits, hyphens and underscores" in said
+
+
+def test_two_kinds_written_under_one_name_are_refused() -> None:
+    said = refusal(artefact({"front-door": kind({"type": "string"}), "front_door": kind({"type": "string"})}))
+    assert said == "the kinds `front-door` and `front_door` would both be written as `FrontDoorEnvelope`"
+
+
+@pytest.mark.parametrize("stamp", [HOSTILE, "main", "abc123", "v1.0.0\nraise SystemExit"])
+def test_a_stamp_that_is_not_a_revision_is_refused(
+    tmp_path: pathlib.Path,
+    stamp: str,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    write(tmp_path, artefact({"pull": kind({"type": "string"})}), stamp=stamp)
+    assert run(tmp_path) == 1
+    assert not (tmp_path / OUT).exists()
+    said = f"{STAMP} names {json.dumps(stamp)}, which is not a release tag or a full commit hash"
+    assert said in capsys.readouterr().err
 
 
 def test_nothing_is_written_when_the_artefact_is_refused(

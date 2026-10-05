@@ -110,7 +110,7 @@ def run(spec: pathlib.Path, repo: pathlib.Path, fetch: Fetch = github) -> int:
                 f"::notice::{name} records no vendored commit, so nothing was compared for it.\n",
             )
         for pin in recorded:
-            if not COMMIT.match(pin):
+            if not COMMIT.fullmatch(pin):
                 sys.stdout.write(
                     f"::error::{name} records {pin!r} in {RECORD}, which is not a full commit hash.\n",
                 )

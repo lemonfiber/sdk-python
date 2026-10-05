@@ -50,6 +50,10 @@ jobs:
           private-key: ${{ secrets.RELEASE_APP_KEY }}
           owner: ${{ github.repository_owner }}
           repositories: ${{ github.event.repository.name }}
+          # The commit and the branch it moves, and the pull request it opens
+          # and arms; nothing the installation grants beyond that.
+          permission-contents: write
+          permission-pull-requests: write
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -133,27 +137,15 @@ jobs:
         run: |
           set -euo pipefail
 
-          # What the sync and the generator actually wrote, rather than a list
-          # kept here. A generator that starts emitting a second file would
-          # otherwise have that file silently left behind, and the pull request
-          # would carry half a catch-up that still fails `contract-check`.
-          changed="$(git diff --name-only)"
-          if [ -z "$changed" ]; then
-            echo "::error::the pin moved and nothing changed on disk, so there is nothing to commit"
-            exit 1
-          fi
-          # `createCommitOnBranch` writes additions; a deletion needs a field
-          # this does not send, so a sync that removes a file has to be seen by
-          # a person rather than half-committed.
-          #
-          # Read into a variable and tested for emptiness rather than piped to
-          # `grep -q`, which exits at the first name and leaves `git diff` to
-          # die of SIGPIPE; under `pipefail` that reads as no deletion at all.
-          deleted="$(git diff --name-only --diff-filter=D)"
-          if [ -n "$deleted" ]; then
-            echo "::error::the sync deleted a file, which this cannot commit. Do it by hand."
-            exit 1
-          fi
+          # What the sync and the generator wrote, and nothing else. The build
+          # before this ran the suite, and this commit is made with a token that
+          # can write here, so any change outside `contract/` and the generated
+          # package refuses the whole commit rather than riding along with it;
+          # so does a deletion or a rename, which a commit of additions cannot
+          # carry. Captured rather than piped onwards, so a refusal stops the
+          # step under `pipefail`.
+          git status --porcelain=v1 -z --untracked-files=all > "${RUNNER_TEMP}/status"
+          changed="$(uv run python -m scripts.what_the_bump_takes < "${RUNNER_TEMP}/status")"
           printf '%s\n' "$changed"
 
           # `main` requires signed commits, and only commits GitHub itself makes
@@ -191,17 +183,14 @@ jobs:
           #
           # Building the JSON in Python also means the message and the file
           # contents are encoded rather than quoted into place by hand.
-          python3 - "$REPO" "$staging" "$base" "$HEAD_SHA" "$PIN" "$body" <<'PY' >request.json
+          CHANGED="$changed" python3 - "$REPO" "$staging" "$base" "$HEAD_SHA" "$PIN" "$body" <<'PY' >"${RUNNER_TEMP}/request.json"
           import base64
           import json
-          import subprocess
+          import os
           import sys
 
           repo, branch, base, head, pin, note = sys.argv[1:7]
-          changed = subprocess.run(
-              ["git", "diff", "--name-only"],
-              capture_output=True, text=True, check=True,
-          ).stdout.split()
+          changed = os.environ["CHANGED"].splitlines()
 
           print(json.dumps({
               "query": (
@@ -243,7 +232,7 @@ jobs:
           }))
           PY
 
-          built="$(gh api graphql --input request.json --jq '.data.createCommitOnBranch.commit.oid')"
+          built="$(gh api graphql --input "${RUNNER_TEMP}/request.json" --jq '.data.createCommitOnBranch.commit.oid')"
 
           if ! printf '%s' "$built" | grep -Eq '^[0-9a-f]{40}$'; then
             echo "::error::the commit was not created; got '${built}'"

@@ -251,7 +251,7 @@ class Alert(typing.TypedDict):
     """What kind of event it is, shared by every instance of it."""
     meaning: str
     """What it costs the operator, which is the half between the event and the
-    fix. "The tunnel dropped" and "restart the gateway" leave whoever reads
+    fix. \"The tunnel dropped\" and \"restart the gateway\" leave whoever reads
     them to work out for themselves whether anything leaked.
     """
     moment: Moment
@@ -262,7 +262,7 @@ class Alert(typing.TypedDict):
     """
     severity: ProblemSeverity
     """How much it matters. A resolution takes the severity of what resolved,
-    because "the critical thing is over" is itself worth the attention the
+    because \"the critical thing is over\" is itself worth the attention the
     critical thing had.
     """
     summary: str
@@ -1070,7 +1070,7 @@ type DoctorVerdict = (
 )
 """How a single check turned out.
 
-"Could not check" (`Unverified`) is its own variant rather than a level of
+\"Could not check\" (`Unverified`) is its own variant rather than a level of
 severity, so a check that could not run can never be mistaken for one that
 passed — the dishonesty this whole subsystem exists to prevent.
 """
@@ -2456,7 +2456,7 @@ class Listing(typing.TypedDict):
 type LogLevel = typing.Literal["trace", "debug", "info", "warn", "error", "fatal"]
 """How bad a line says it is.
 
-Ordered, so a filter can ask for "warnings and worse" without a table of which
+Ordered, so a filter can ask for \"warnings and worse\" without a table of which
 level outranks which. Deliberately coarse: these six are what services agree
 on, and a seventh that only one of them writes would be a level nobody could filter
 by across the stack.
@@ -2509,7 +2509,7 @@ type Medium = typing.Literal["film", "series", "other"]
 """The kinds of thing a household holds.
 
 Named rather than passed through as the server's own word, because a surface
-drawing "Series" against one server and "tvshow" against another would be
+drawing \"Series\" against one server and \"tvshow\" against another would be
 rendering a detail of which server this household runs.
 
 `Medium` rather than `Kind`, `Holding` or `Sort`: this product already calls the two
@@ -3067,8 +3067,8 @@ class PairingMaterial(typing.TypedDict):
 type PanelArray_of_Queue = PanelArray_of_QueueReady | PanelArray_of_QueueUnavailable
 """A panel's content, or the reason its source could not fill it.
 
-The difference between "this panel is up to date" and "this panel's source is
-unreachable" is the whole of degrading honestly: an unavailable panel says so,
+The difference between \"this panel is up to date\" and \"this panel's source is
+unreachable\" is the whole of degrading honestly: an unavailable panel says so,
 in its own words, rather than showing stale data as current or blank data as
 zero — and the panels beside it stay live.
 """
@@ -3096,8 +3096,8 @@ class PanelArray_of_QueueUnavailableData(typing.TypedDict):
 type PanelArray_of_Service = PanelArray_of_ServiceReady | PanelArray_of_ServiceUnavailable
 """A panel's content, or the reason its source could not fill it.
 
-The difference between "this panel is up to date" and "this panel's source is
-unreachable" is the whole of degrading honestly: an unavailable panel says so,
+The difference between \"this panel is up to date\" and \"this panel's source is
+unreachable\" is the whole of degrading honestly: an unavailable panel says so,
 in its own words, rather than showing stale data as current or blank data as
 zero — and the panels beside it stay live.
 """
@@ -3125,8 +3125,8 @@ class PanelArray_of_ServiceUnavailableData(typing.TypedDict):
 type PanelArray_of_Transfer = PanelArray_of_TransferReady | PanelArray_of_TransferUnavailable
 """A panel's content, or the reason its source could not fill it.
 
-The difference between "this panel is up to date" and "this panel's source is
-unreachable" is the whole of degrading honestly: an unavailable panel says so,
+The difference between \"this panel is up to date\" and \"this panel's source is
+unreachable\" is the whole of degrading honestly: an unavailable panel says so,
 in its own words, rather than showing stale data as current or blank data as
 zero — and the panels beside it stay live.
 """
@@ -3154,8 +3154,8 @@ class PanelArray_of_TransferUnavailableData(typing.TypedDict):
 type PanelFrontDoorReport = PanelFrontDoorReportReady | PanelFrontDoorReportUnavailable
 """A panel's content, or the reason its source could not fill it.
 
-The difference between "this panel is up to date" and "this panel's source is
-unreachable" is the whole of degrading honestly: an unavailable panel says so,
+The difference between \"this panel is up to date\" and \"this panel's source is
+unreachable\" is the whole of degrading honestly: an unavailable panel says so,
 in its own words, rather than showing stale data as current or blank data as
 zero — and the panels beside it stay live.
 """
@@ -3183,8 +3183,8 @@ class PanelFrontDoorReportUnavailableData(typing.TypedDict):
 type PanelHouseholdReport = PanelHouseholdReportReady | PanelHouseholdReportUnavailable
 """A panel's content, or the reason its source could not fill it.
 
-The difference between "this panel is up to date" and "this panel's source is
-unreachable" is the whole of degrading honestly: an unavailable panel says so,
+The difference between \"this panel is up to date\" and \"this panel's source is
+unreachable\" is the whole of degrading honestly: an unavailable panel says so,
 in its own words, rather than showing stale data as current or blank data as
 zero — and the panels beside it stay live.
 """
@@ -3212,8 +3212,8 @@ class PanelHouseholdReportUnavailableData(typing.TypedDict):
 type PanelStorage = PanelStorageReady | PanelStorageUnavailable
 """A panel's content, or the reason its source could not fill it.
 
-The difference between "this panel is up to date" and "this panel's source is
-unreachable" is the whole of degrading honestly: an unavailable panel says so,
+The difference between \"this panel is up to date\" and \"this panel's source is
+unreachable\" is the whole of degrading honestly: an unavailable panel says so,
 in its own words, rather than showing stale data as current or blank data as
 zero — and the panels beside it stay live.
 """
@@ -3241,8 +3241,8 @@ class PanelStorageUnavailableData(typing.TypedDict):
 type PanelVpn = PanelVpnReady | PanelVpnUnavailable
 """A panel's content, or the reason its source could not fill it.
 
-The difference between "this panel is up to date" and "this panel's source is
-unreachable" is the whole of degrading honestly: an unavailable panel says so,
+The difference between \"this panel is up to date\" and \"this panel's source is
+unreachable\" is the whole of degrading honestly: an unavailable panel says so,
 in its own words, rather than showing stale data as current or blank data as
 zero — and the panels beside it stay live.
 """
@@ -3270,7 +3270,7 @@ class PanelVpnUnavailableData(typing.TypedDict):
 class Part(typing.TypedDict):
     """One part of a traced item — an episode of a series. A film has no parts: the item is
     the whole, and a trace of it says all there is to say. A series does not, which is the
-    gap this closes: "the show is imported" is true the moment one episode lands, and reads
+    gap this closes: \"the show is imported\" is true the moment one episode lands, and reads
     as done while nine are still missing.
     """
 
@@ -3422,7 +3422,7 @@ type PluginConstraint = typing.Literal[
 """A kind of constraint an expectation can put on a body.
 
 The same vocabulary a proof's expectation and a contributed check's use, so that
-"a status alone is not evidence" is one rule rather than three. Read as well as
+\"a status alone is not evidence\" is one rule rather than three. Read as well as
 written: a declaration that an assertion fails on a recording names the one of these
 that fails there.
 """
@@ -4560,7 +4560,7 @@ type RepairOutcome = (
 )
 """How a repair turned out, once the check that raised the finding has been asked again.
 
-Deliberately not a boolean. "It ran" and "it worked" are different claims, and a model
+Deliberately not a boolean. \"It ran\" and \"it worked\" are different claims, and a model
 that cannot tell them apart will eventually report the first as the second.
 """
 
@@ -4586,7 +4586,7 @@ class RepairOutcomeFixed(typing.TypedDict):
 class RepairOutcomeStopped(typing.TypedDict):
     """It stopped partway, leaving this.
 
-    Named precisely rather than as "failed": a half-applied change is a different
+    Named precisely rather than as \"failed\": a half-applied change is a different
     state to be in from an unchanged one, and the operator has to know which they are
     looking at before they try anything else.
     """
@@ -5399,7 +5399,7 @@ class SettledRehearsed(typing.TypedDict):
     Its own outcome rather than one of the refusals above, because it is not a
     refusal: nothing went wrong, and what an operator is being told is what would
     happen if they ran it again meaning it. Carrying its own three fields rather
-    than one sentence, because "it would rotate the qBittorrent password" is not a
+    than one sentence, because \"it would rotate the qBittorrent password\" is not a
     report — where the value lives is what would be written over, and what is owed
     afterwards is the half nobody finds out about until a consumer stops working.
 
@@ -5554,8 +5554,8 @@ class Snapshot(typing.TypedDict):
     """The one address to hand somebody who lives here.
 
     On the screen rather than only behind a question, because the operator who
-    needs it is not the one who thought to ask: they have just been asked "what
-    do I open?" by somebody in the next room. Built from the same reading as the
+    needs it is not the one who thought to ask: they have just been asked \"what
+    do I open?\" by somebody in the next room. Built from the same reading as the
     panels beside it, so the screen and `front-door` cannot name different doors.
     """
     health: HealthSummary
@@ -5650,7 +5650,7 @@ class SpaceCategoryTree(typing.TypedDict):
     """One directory beneath the data root, named as the operator named it.
 
     Per directory rather than one figure for the library, because several
-    libraries commonly share a volume and "the library is large" tells nobody
+    libraries commonly share a volume and \"the library is large\" tells nobody
     which of them is growing.
     """
 
@@ -5755,7 +5755,7 @@ type Stage = typing.Literal[
     "imported",
     "available",
 ]
-"""A stage in an item's journey, ordered from "nobody asked for it" to "playable". The
+"""A stage in an item's journey, ordered from \"nobody asked for it\" to \"playable\". The
 declaration order is the pipeline order, so one stage compares less than a later one.
 """
 
@@ -5988,11 +5988,11 @@ class Stuck(typing.TypedDict):
     blocking: typing.NotRequired[str | None]
     """What the service said was blocking it, in its own words, where it said
     anything. A permission denial from an import log is worth more than any
-    interpretation of it, and it is the difference between "stuck" and
+    interpretation of it, and it is the difference between \"stuck\" and
     something an operator can fix.
     """
     held_for: int
-    """How long it has been that way, in seconds — what turns "stuck" into a
+    """How long it has been that way, in seconds — what turns \"stuck\" into a
     sentence an operator can weigh.
     """
     items: int
@@ -6019,14 +6019,14 @@ class StuckEntry(typing.TypedDict):
 
 
 class StuckReport(typing.TypedDict):
-    """The items whose downloads are stuck, across the \\*arrs — the landing point for "N
-    items stuck" that queue health reports, each entry naming the item so the operator
+    """The items whose downloads are stuck, across the \\*arrs — the landing point for \"N
+    items stuck\" that queue health reports, each entry naming the item so the operator
     goes straight to its per-item trace rather than to a count to investigate.
     """
 
     incomplete: bool
     """Whether an \\*arr's queue could not be read, so the list may be short — reported
-    rather than read as "nothing stuck", the same honesty a trace keeps.
+    rather than read as \"nothing stuck\", the same honesty a trace keeps.
     """
     items: list[StuckEntry]
     """The stuck items, each linkable to its trace."""
@@ -6135,7 +6135,7 @@ class Switched(typing.TypedDict):
     """What narrowing the active set moved.
 
     Three lists rather than a before and an after, because the operator's question
-    is not "what is running now" — they can ask that — but "what did that do". The
+    is not \"what is running now\" — they can ask that — but \"what did that do\". The
     middle list is the one that makes the verb worth having: it is the promise that
     a download in flight was not interrupted to change the shape of the stack
     around it.
@@ -6176,7 +6176,7 @@ type TakesAway = TakesAwayBounded | TakesAwayOpenEnded
 """How long one way of acting on the stack takes something away for.
 
 Two cases rather than a length and a flag, because *no bound* is not a long
-bound and a surface offered a number plus a "really, though?" beside it will
+bound and a surface offered a number plus a \"really, though?\" beside it will
 show the number. A reader that handles both arms has said both things; one
 that handles only the first does not compile.
 """
@@ -6299,8 +6299,8 @@ class TraceMoment(typing.TypedDict):
 
 type TraceOutcome = typing.Literal["grabbed", "download-failed", "imported", "removed"]
 """A notable thing that happened to an item, as an \\*arr's history records it. Where the
-furthest stage answers "how far did it get?", the sequence of outcomes answers "what
-has been tried?" — a release grabbed more than once, a download that failed and was
+furthest stage answers \"how far did it get?\", the sequence of outcomes answers \"what
+has been tried?\" — a release grabbed more than once, a download that failed and was
 tried again, a file imported and later removed. Repeated failed grabs are a pattern
 worth seeing, not something a single furthest-stage reading can show.
 """
@@ -6308,7 +6308,7 @@ worth seeing, not something a single furthest-stage reading can show.
 
 class TraceReport(typing.TypedDict):
     """Where one item is in the pipeline: how far it got, why it stopped if it did, and the
-    stages it passed through — the answer to "where is my show?".
+    stages it passed through — the answer to \"where is my show?\".
     """
 
     confidence: TraceConfidence
@@ -6317,7 +6317,7 @@ class TraceReport(typing.TypedDict):
     """How much of the item is actually here, season by season — present for an item
     made of parts, absent for a film, which is the whole item and has none.
 
-    The furthest stage alone cannot answer this: a series is "imported" the moment one
+    The furthest stage alone cannot answer this: a series is \"imported\" the moment one
     episode lands, which reads as done while the rest are missing.
     """
     findings: list[str]
@@ -6489,7 +6489,7 @@ class UndoReversal(typing.TypedDict):
 
     A reversal an operator asked for by name has to say what it did *not* do. Five
     changes asked back and three carried out is a machine in a state nobody has been
-    told about, and "some of it worked" is the sentence that makes somebody go
+    told about, and \"some of it worked\" is the sentence that makes somebody go
     looking by hand. Empty where everything went back, which is the common case.
 
     On a run that only said what it would do, this is what it cannot promise: a
@@ -6691,7 +6691,7 @@ class UnsupportedReport(typing.TypedDict):
     status of a stack the operator maintains themselves, where a service declaring an
     API this build cannot reach is named the same way — what, and why — rather than
     being dropped from every feature that would have used it. One shape for both,
-    because "named rather than passed over" is the whole of what either is saying and
+    because \"named rather than passed over\" is the whole of what either is saying and
     two shapes would be two ways of saying it.
     """
 
@@ -6793,7 +6793,7 @@ type UpdateState = typing.Literal["current", "updates-available", "updated", "pa
 """Where the stack stands against the versions this build pins.
 
 Exactly one of these is true of a run at a time. A surface that had to say
-"updates available, and also partly applied" would be reporting the question
+\"updates available, and also partly applied\" would be reporting the question
 rather than the answer.
 """
 
@@ -6965,7 +6965,7 @@ class VersionReport(typing.TypedDict):
     """What versions are in play: the binary, the stack it operates, and what changed.
 
     The changelog is here rather than behind a request of its own because it answers
-    the second half of the same question. "Which version am I on" is asked by
+    the second half of the same question. \"Which version am I on\" is asked by
     somebody deciding whether to move, and what they need next is what the version
     they are on actually brought — so every surface that already reaches this read
     reaches both halves, and none of the three had to learn a new question.
@@ -7510,8 +7510,8 @@ ResolvedUnmeasured = typing.TypedDict(
 )
 """A proportion was asked for and nothing has measured the line.
 
-Deliberately not folded into [`Self::Unlimited`]. "Half of an unknown
-number" resolving to "no limit at all" is the shape of a setting an
+Deliberately not folded into [`Self::Unlimited`]. \"Half of an unknown
+number\" resolving to \"no limit at all\" is the shape of a setting an
 operator believes is in force while the stack takes the whole line.
 """
 

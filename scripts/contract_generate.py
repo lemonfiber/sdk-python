@@ -18,6 +18,8 @@ import sys
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, NoReturn, cast
 
+from scripts.contract_sync import REVISION
+
 if TYPE_CHECKING:
     from collections.abc import Iterator, Mapping, Sequence
 
@@ -25,6 +27,8 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 ARTEFACT = pathlib.Path("contract/web-api.contract.json")
 STAMP = pathlib.Path("contract/VERSION")
 OUT = pathlib.Path("src/lemonfiber/_generated")
+UNKNOWN = "an unknown revision"
+"""What the generated files say they came from when `contract/VERSION` is missing."""
 
 SPOKEN = 1
 """The wire version this package implements."""
@@ -57,6 +61,9 @@ UNDERSTOOD = (
     ANNOTATIONS | NARROWING | {"type", "properties", "items", "oneOf", "anyOf", "const", "enum", "$ref"}
 )
 """Every keyword this generator reads. Any other is refused rather than dropped."""
+
+KIND = re.compile(r"^[a-z][a-z0-9_-]*$")
+"""A kind, as the core spells one: `front-door`."""
 
 CODE = re.compile(r"^[A-Z][A-Z0-9]*-\d+$")
 """A problem code, as the core spells one: `ADMIT-4`."""
@@ -114,11 +121,23 @@ def is_field_name(key: str) -> bool:
     return key.isidentifier() and not keyword.iskeyword(key)
 
 
+def escaped(character: str) -> str:
+    """Spell one character so that inside a docstring it is that character and nothing more."""
+    if character in {"\\", '"'}:
+        return f"\\{character}"
+    if character == "\n" or character.isprintable():
+        return character
+    return character.encode("unicode_escape").decode("ascii")
+
+
 def docstring(text: str, indent: str) -> list[str]:
-    """Write a description as a docstring that reads back as the same text."""
-    body = text.strip().replace("\\", "\\\\").replace('"""', '\\"\\"\\"')
-    if body.endswith('"'):
-        body = body[:-1] + '\\"'
+    """Write a description as a docstring that reads back as the same text.
+
+    Every backslash and quote is escaped, so no run of quotes in the text can
+    close the docstring, and every character that is not printable is written
+    as its escape, so none of them can end a line or the file.
+    """
+    body = "".join(escaped(character) for character in text.strip())
     lines = body.split("\n")
     if len(lines) == 1:
         return [f'{indent}"""{body}"""']
@@ -157,7 +176,7 @@ def ambiguous(node: object, path: str) -> Iterator[str]:
 
 def malformed_refusal(code: str, entry: object) -> Iterator[str]:
     """Yield everything wrong with one listed refusal, as lines naming its code."""
-    if not CODE.match(code):
+    if not CODE.fullmatch(code):
         yield f"{json.dumps(code)}: not a code, which is a prefix and a number"
     if not isinstance(entry, dict):
         yield f"{code}: not an object"
@@ -166,7 +185,7 @@ def malformed_refusal(code: str, entry: object) -> Iterator[str]:
     name = listed.get("name")
     status = listed.get("status")
     description = listed.get("description")
-    if not isinstance(name, str) or not SCREAMING_SNAKE.match(name):
+    if not isinstance(name, str) or not SCREAMING_SNAKE.fullmatch(name):
         yield f"{code}: name {json.dumps(name)} is not SCREAMING_SNAKE"
     if not isinstance(status, int) or isinstance(status, bool) or status not in REFUSAL_STATUSES:
         yield f"{code}: status {json.dumps(status)} is not a refusal's status"
@@ -258,7 +277,7 @@ class Writer:
                 f"`{name}`, defined by `{self.kind}`, takes a name this generator writes itself — "
                 f"here it names {self.owned[name]}. Rename the definition in the contract.",
             )
-        if not DEFINITION.match(name) or keyword.iskeyword(name):
+        if not DEFINITION.fullmatch(name) or keyword.iskeyword(name):
             refuse(f"`{name}`, defined by `{self.kind}`, is not a name a Python type can carry")
         schema = self.definitions.get(name)
         if schema is None:
@@ -351,7 +370,7 @@ class Writer:
         """Return the Python type a schema describes, naming any object it holds inline after `name`."""
         reference = node.get("$ref")
         if reference is not None:
-            matched = REFERENCE.match(str(reference))
+            matched = REFERENCE.fullmatch(str(reference))
             if matched is None:
                 refuse(f"{origin} refers to {reference}, outside the definitions beside it")
             return self.definition(matched.group(1))
@@ -434,9 +453,16 @@ def kinds_of(artefact: Mapping[str, object]) -> dict[str, dict[str, object]]:
     if not isinstance(kinds, dict) or not kinds:
         refuse("the vendored contract describes no kinds")
     described = cast("dict[str, object]", kinds)
-    for kind, schema in described.items():
+    spelled: dict[str, str] = {}
+    for kind, schema in sorted(described.items()):
+        if not KIND.fullmatch(kind):
+            refuse(f"the kind {json.dumps(kind)} is not lowercase letters, digits, hyphens and underscores")
         if not isinstance(schema, dict):
             refuse(f"the kind `{kind}` is {json.dumps(schema)}, which is not an envelope's schema")
+        name = f"{pascal(kind)}Envelope"
+        if name in spelled:
+            refuse(f"the kinds `{spelled[name]}` and `{kind}` would both be written as `{name}`")
+        spelled[name] = kind
     return cast("dict[str, dict[str, object]]", described)
 
 
@@ -472,7 +498,7 @@ def envelope(writer: Writer, kind: str, schema: Mapping[str, object]) -> list[st
     for needed in ENVELOPE_FIELDS:
         if needed not in properties or needed not in required:
             refuse(f"{origin} does not require `{needed}`, which every envelope carries")
-    lines = [f"class {name}(typing.TypedDict):", f'    """The envelope carrying `{kind}`."""', ""]
+    lines = [f"class {name}(typing.TypedDict):", *docstring(f"The envelope carrying `{kind}`.", "    "), ""]
     for key in sorted(properties):
         if not is_field_name(key):
             refuse(f"{origin} carries `{key}`, which an envelope field cannot be named")
@@ -536,6 +562,8 @@ def refusal_source(refusals: Mapping[str, Mapping[str, object]]) -> list[str]:
 
 def generate(artefact: Mapping[str, object], stamp: str) -> dict[pathlib.Path, str]:
     """Return every generated file's path and source, or raise the refusal."""
+    if stamp != UNKNOWN and not REVISION.fullmatch(stamp):
+        refuse(f"{STAMP} names {json.dumps(stamp)}, which is not a release tag or a full commit hash")
     version = artefact.get("api_version")
     if version != SPOKEN:
         refuse(
@@ -628,7 +656,7 @@ def generate(artefact: Mapping[str, object], stamp: str) -> dict[pathlib.Path, s
 def read_artefact(root: pathlib.Path) -> tuple[dict[str, object], str]:
     """Return the vendored artefact and the revision it was taken from."""
     stamp_path = root / STAMP
-    stamp = stamp_path.read_text(encoding="utf-8").strip() if stamp_path.is_file() else "an unknown revision"
+    stamp = stamp_path.read_text(encoding="utf-8").strip() if stamp_path.is_file() else UNKNOWN
     try:
         artefact: object = json.loads((root / ARTEFACT).read_text(encoding="utf-8"))
     except (OSError, ValueError) as unreadable:

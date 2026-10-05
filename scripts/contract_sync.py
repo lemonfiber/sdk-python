@@ -88,7 +88,7 @@ def described(served: bytes, revision: str) -> tuple[int, int]:
 def run(arguments: list[str], root: pathlib.Path, take: Callable[[str], bytes] = fetch) -> int:
     """Vendor the artefact the named revision serves into `root`."""
     revision = arguments[0] if arguments else ""
-    if not REVISION.match(revision):
+    if not REVISION.fullmatch(revision):
         sys.stderr.write(
             "contract_sync: name a release tag or a full 40-character commit hash, as in `just sync v1.0.0`\n",
         )
