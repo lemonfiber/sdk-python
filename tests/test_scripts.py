@@ -12,7 +12,13 @@ from typing import TYPE_CHECKING, Self
 
 import pytest
 
-from scripts import backward_compat, contract_sync, mutation_score, what_the_bump_takes
+from scripts import (
+    backward_compat,
+    contract_sync,
+    mutation_score,
+    the_doors_this_client_names,
+    what_the_bump_takes,
+)
 
 if TYPE_CHECKING:
     import pathlib
@@ -437,3 +443,82 @@ def test_the_command_line_names_the_spec_and_the_tree(
     )
     assert backward_compat.main() == 1
     assert asked == [(tmp_path / "s", tmp_path)]
+
+
+PAGE = """# Contract
+
+## Reading
+
+```
+GET /api/status        GET /api/bundle/{name}
+GET /api/explain?…
+```
+
+## Live state
+"""
+
+
+def doors(root: pathlib.Path, page: str, reads: str) -> tuple[list[str], int]:
+    """Lay out a spec page and a read list, and compare them."""
+    (root / "spec/20-architecture/contracts").mkdir(parents=True)
+    (root / "spec/20-architecture/contracts/web-api.md").write_text(page, encoding="utf-8")
+    (root / "repo/src/lemonfiber").mkdir(parents=True)
+    (root / "repo/src/lemonfiber/reads.py").write_text(reads, encoding="utf-8")
+    return the_doors_this_client_names.problems(root / "spec", root / "repo")
+
+
+READS = """
+class Read(StrEnum):
+    STATUS = "status"
+    EXPLAIN = "explain"
+
+BUNDLE: Final = "/api/bundle"
+EVENTS: Final = "/api/events"
+"""
+
+
+def test_the_page_and_the_client_agree(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(the_doors_this_client_names, "FEWEST", 3)
+    assert doors(tmp_path, PAGE, READS) == ([], 3)
+
+
+def test_a_read_the_client_cannot_reach_and_a_path_the_page_does_not_name_are_both_named(
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(the_doors_this_client_names, "FEWEST", 1)
+    found, _ = doors(
+        tmp_path,
+        PAGE,
+        READS.replace('"explain"', '"extra"').replace(
+            'STATUS = "status"',
+            'STATUS = "status"\n    AGAIN = "status"',
+        ),
+    )
+    assert any("/api/explain" in line and "holds no path" in line for line in found)
+    assert any("/api/extra" in line and "does not name them" in line for line in found)
+    assert any("held twice" in line for line in found)
+
+
+def test_reading_too_little_is_a_failure(tmp_path: pathlib.Path) -> None:
+    found, _ = doors(tmp_path, PAGE, READS)
+    assert any("fewer than the 25" in line for line in found)
+
+
+@pytest.mark.parametrize("page", ["# no heading\n", "## Reading\n\nprose only\n"])
+def test_a_page_that_cannot_be_read_is_a_failure(tmp_path: pathlib.Path, page: str) -> None:
+    found, _ = doors(tmp_path, page, READS)
+    assert any("heading" in line or "nothing is fenced" in line for line in found)
+
+
+def test_a_missing_page_or_read_list_is_a_failure(tmp_path: pathlib.Path) -> None:
+    found, _ = the_doors_this_client_names.problems(tmp_path / "nowhere", tmp_path / "nothing")
+    assert any("no contract page" in line for line in found)
+    assert any("no read list" in line for line in found)
+
+
+def test_the_read_list_here_matches_its_own_reading() -> None:
+    paths, twice = the_doors_this_client_names.held(the_doors_this_client_names.ROOT)
+    assert twice == []
+    assert "/api/status" in paths
+    assert "/api/logs" in paths
