@@ -208,7 +208,7 @@ jobs:
       - name: Mutate, and hold the score to its minimum
         run: uv run --locked --no-build just mutation
       - name: The mutants that survived, each as the change it made
-        if: ${{ failure() }}
+        if: ${{ !cancelled() }}
         run: |
           set -euo pipefail
           survived="$(uv run --locked --no-build mutmut results | awk -F: '/: survived$/ { gsub(/^[ \t]+/, "", $1); print $1 }')"

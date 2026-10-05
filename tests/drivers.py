@@ -26,7 +26,7 @@ if TYPE_CHECKING:
     )
     from lemonfiber.contract import JobEnvelope
 
-SETTLE = 0.05
+SETTLE = 0.25
 """Seconds a loop is given, before it is closed, to finish closing a connection a refused certificate left."""
 
 type Flavour = Literal["async", "sync"]
