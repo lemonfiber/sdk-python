@@ -86,8 +86,10 @@ class Stack:
         self._runner: web.AppRunner | None = None
         self._context: ssl.SSLContext | None = None
         self.pin = ""
+        self.authority = b""
         if tls:
             authority = trustme.CA()
+            self.authority = authority.cert_pem.bytes()
             issued = authority.issue_cert("127.0.0.1", "localhost")
             self._context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
             with issued.private_key_and_cert_chain_pem.tempfile() as path:

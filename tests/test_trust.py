@@ -33,6 +33,8 @@ from tests.drivers import admitted, connect, opened_session
 from tests.stack import Reply, envelope
 
 if TYPE_CHECKING:
+    import pathlib
+
     from lemonfiber.address import Resolver
     from tests.drivers import Flavour
     from tests.stack import Stack
@@ -227,6 +229,28 @@ def test_a_named_address_is_reached_where_it_resolved_when_given(flavour: Flavou
     driver.close()
     [arrived] = stack.arrived
     assert arrived.headers["Host"] == f"stack.invalid:{port_of(stack)}"
+
+
+def test_a_named_address_reached_by_what_it_resolved_to_is_held_to_its_name(
+    flavour: Flavour,
+    tls_stack: Stack,
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    authority = tmp_path / "authority.pem"
+    authority.write_bytes(tls_stack.authority)
+    monkeypatch.setenv("SSL_CERT_FILE", str(authority))
+    tls_stack.reply("GET", "/api/status", Reply(body=STATUS))
+    named = Address(f"https://localhost:{port_of(tls_stack)}", resolver=resolving("127.0.0.1"))
+    driver = connect(flavour, named, Credential(PRINTED))
+    assert driver.read(Read.STATUS) == STATUS
+    driver.close()
+    elsewhere = Address(f"https://stack.invalid:{port_of(tls_stack)}", resolver=resolving("127.0.0.1"))
+    driver = connect(flavour, elsewhere, Credential(PRINTED))
+    with pytest.raises(CertificateRefusedError):
+        driver.read(Read.STATUS)
+    driver.close()
+    assert len(tls_stack.arrived) == 1
 
 
 def test_a_named_address_tries_each_loopback_address_it_resolved_to(flavour: Flavour, stack: Stack) -> None:
@@ -444,6 +468,7 @@ def test_a_failure_carries_nothing_of_the_request_that_met_it(
     with pytest.raises(UnreachableError) as failed:
         driver.read(Read.STATUS)
     driver.close()
+    assert str(failed.value) == "lemonfiber is not answering at that address. It may have been stopped."
     assert carries_nothing_of(failed.value, PRINTED)
 
 
