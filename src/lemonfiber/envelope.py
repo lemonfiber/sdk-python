@@ -56,13 +56,23 @@ def is_known(fields: Mapping[str, object]) -> TypeIs[Envelope]:
     return fields.get("kind") in KINDS
 
 
+NOT_JSON: Final = object()
+"""What a body that is not JSON is read as, so the parser's error is let go before the refusal is raised."""
+
+
 def parse_envelope(body: bytes | str) -> Envelope:
-    """Parse an answer's body and read it as an envelope."""
+    """Parse an answer's body and read it as an envelope.
+
+    A body that is not JSON is refused once the parser's error is let go: that
+    error holds the whole body, which may carry a session's credential.
+    """
     try:
         document: object = json.loads(body)
-    except (ValueError, RecursionError) as unreadable:
+    except ValueError, RecursionError:
+        document = NOT_JSON
+    if document is NOT_JSON:
         msg = "it is not JSON"
-        raise UnreadableResponseError(msg) from unreadable
+        raise UnreadableResponseError(msg)
     return read_envelope(document)
 
 

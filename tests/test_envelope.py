@@ -110,3 +110,10 @@ def test_an_envelope_of_another_kind_is_refused() -> None:
 def test_every_problem_is_a_lemonfiber_error() -> None:
     for problem in (UnreadableResponseError, ApiVersionMismatchError, UnknownKindError, UnexpectedKindError):
         assert issubclass(problem, LemonfiberError)
+
+
+def test_an_answer_that_is_not_json_is_refused_holding_nothing_of_it() -> None:
+    with pytest.raises(UnreadableResponseError) as refused:
+        parse_envelope(b'{"kind": "admission", "data": {"token": "minted-and-secret"')
+    assert refused.value.__cause__ is None
+    assert refused.value.__context__ is None
