@@ -171,3 +171,15 @@ class StillRunningError(LemonfiberError):
         super().__init__(f"The work {job!r} was still going after {waited:g} seconds.")
         self.job = job
         self.waited = waited
+
+
+class StreamLostError(LemonfiberError):
+    """The live stream broke and could not be reopened; everything held is the last thing confirmed."""
+
+    def __init__(self, attempts: int) -> None:
+        """Say how many attempts to reopen it failed."""
+        super().__init__(
+            f"The live stream broke and {attempts} attempts to reopen it failed. Everything shown is the "
+            "last thing confirmed, not what is true now.",
+        )
+        self.attempts = attempts

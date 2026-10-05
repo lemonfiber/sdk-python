@@ -17,9 +17,10 @@ import urllib3.exceptions
 from lemonfiber import _wire
 from lemonfiber.jobs import Ended, Finished, Running
 from lemonfiber.problems import CertificateRefusedError, LemonfiberError, UnreachableError
+from lemonfiber.stream import FIRST_WAIT, OPENED, RECONNECTS_ALLOWED, SILENCE_ALLOWED, Break, Following
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping, Sequence
+    from collections.abc import Generator, Iterator, Mapping, Sequence
     from types import TracebackType
 
     from lemonfiber._generated.contract import Envelope, JobEnvelope
@@ -27,6 +28,10 @@ if TYPE_CHECKING:
     from lemonfiber.credential import Credential
     from lemonfiber.jobs import JobStanding
     from lemonfiber.reads import Read
+    from lemonfiber.stream import Arrival, Live, Stale
+
+CHUNK: Final = 65536
+"""The most bytes one read of the stream asks for."""
 
 
 VERIFYING: Final = "CERT_REQUIRED"
@@ -189,6 +194,23 @@ class SyncClient:
             standing = self.job(name)
         return standing
 
+    def events(
+        self,
+        *,
+        silence: float = SILENCE_ALLOWED,
+        reconnects: int = RECONNECTS_ALLOWED,
+        first_wait: float = FIRST_WAIT,
+    ) -> SyncStream:
+        """Follow the live stream: what arrives, what has gone stale across a gap, and each gap itself.
+
+        Silence longer than `silence` seconds is a broken stream. A broken stream
+        is reopened from the last event it carried, waiting `first_wait` seconds
+        and twice as long after each failure, and `StreamLostError` is raised once
+        `reconnects` attempts in a row have failed.
+        """
+        following = Following(self._credential, silence=silence, reconnects=reconnects, first_wait=first_wait)
+        return SyncStream(self._ways, self._address.prefix, following)
+
     def close(self) -> None:
         """Close every connection this client holds."""
         close_all(self._ways)
@@ -204,6 +226,125 @@ class SyncClient:
         trace: TracebackType | None,
     ) -> None:
         """Close the client."""
+        self.close()
+
+
+class SyncStream:
+    """The live stream, followed synchronously. Iterate it for each `Arrival`; close it to let go."""
+
+    def __init__(
+        self,
+        ways: Sequence[Way],
+        prefix: str,
+        following: Following,
+    ) -> None:
+        """Hold what opening and reading the stream needs; nothing is sent until it is iterated."""
+        self._ways = ways
+        self._prefix = prefix
+        self._following = following
+        self._response: urllib3.BaseHTTPResponse | None = None
+        self._arrivals = self._follow()
+
+    def __iter__(self) -> Iterator[Arrival]:
+        """Return the stream itself."""
+        return self
+
+    def __next__(self) -> Arrival:
+        """Return the next arrival, waiting for it."""
+        return next(self._arrivals)
+
+    def held(self) -> dict[str, Live | Stale]:
+        """Return the last value of each kind the stream carried, and whether it is still current."""
+        return self._following.held()
+
+    def _follow(self) -> Generator[Arrival]:
+        while True:
+            response = self._open()
+            if response is not None:
+                self._response = response
+                self._following.opened()
+                why = yield from self._read(response)
+                response.drain_conn()
+                response.release_conn()
+                self._response = None
+                yield from self._following.broke(why)
+            time.sleep(self._following.retry())
+
+    def _open(self) -> urllib3.BaseHTTPResponse | None:
+        call = self._following.call()
+        for way in self._ways:
+            response = self._attempt(way, call)
+            if response is not None:
+                return self._judged(response)
+        return None
+
+    def _attempt(self, way: Way, call: _wire.Call) -> urllib3.BaseHTTPResponse | None:
+        """Ask for the stream over one route: the response, or nothing where none came back.
+
+        A certificate the stack does not hold to is raised; anything else leaves
+        the next route, or the next attempt, to try.
+        """
+        route, pool = way
+        try:
+            response = pool.urlopen(
+                call.method,
+                self._prefix + call.path,
+                headers={**call.headers, **route.headers()},
+                retries=False,
+                preload_content=False,
+                timeout=urllib3.Timeout(connect=pool.timeout.connect_timeout, read=self._following.silence),
+            )
+        except urllib3.exceptions.SSLError:
+            failure = CertificateRefusedError(_wire.CERTIFICATE_REFUSED)
+        except urllib3.exceptions.HTTPError:
+            return None
+        else:
+            return response
+        raise failure
+
+    @staticmethod
+    def _judged(response: urllib3.BaseHTTPResponse) -> urllib3.BaseHTTPResponse | None:
+        """Return a response that opened the stream, raising the refusal where the stack answered with one."""
+        if response.status == OPENED:
+            return response
+        headers = {name.lower(): value for name, value in response.headers.items()}
+        answer = _wire.Answer(response.status, headers, response.read())
+        response.release_conn()
+        refusal = _wire.opening_refusal(answer)
+        if refusal is not None:
+            raise refusal
+        return None
+
+    def _read(self, response: urllib3.BaseHTTPResponse) -> Generator[Arrival, None, Break]:
+        while True:
+            try:
+                chunk = response.read1(CHUNK)
+            except urllib3.exceptions.ReadTimeoutError:
+                return Break.SILENT
+            except urllib3.exceptions.HTTPError, OSError:
+                return Break.DROPPED
+            if not chunk:
+                return Break.ENDED
+            yield from self._following.heard(chunk)
+
+    def close(self) -> None:
+        """Stop following and let the connection go."""
+        self._arrivals.close()
+        if self._response is not None:
+            self._response.close()
+            self._response = None
+
+    def __enter__(self) -> Self:
+        """Return the stream, to be closed when the block ends."""
+        return self
+
+    def __exit__(
+        self,
+        kind: type[BaseException] | None,
+        error: BaseException | None,
+        trace: TracebackType | None,
+    ) -> None:
+        """Close the stream."""
         self.close()
 
 

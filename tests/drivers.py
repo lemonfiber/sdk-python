@@ -25,7 +25,10 @@ if TYPE_CHECKING:
         Query,
         Read,
     )
+    from lemonfiber._aio import AsyncStream
+    from lemonfiber._sync import SyncStream
     from lemonfiber.contract import JobEnvelope
+    from lemonfiber.stream import Arrival, Live, Stale
 
 SETTLE = 0.25
 """Seconds a loop is given, before it is closed, to finish the closing exchange of its encrypted connections."""
@@ -34,8 +37,69 @@ type Flavour = Literal["async", "sync"]
 FLAVOURS: tuple[Flavour, ...] = ("async", "sync")
 
 
+class Following(Protocol):
+    """What a test asks of a stream being followed, whichever client opened it."""
+
+    def take(self, count: int) -> list[Arrival]:
+        """Return the next `count` arrivals, waiting for each."""
+        ...
+
+    def held(self) -> dict[str, Live | Stale]:
+        """Return what the stream holds."""
+        ...
+
+    def close(self) -> None:
+        """Stop following."""
+        ...
+
+
+class SyncFollowing:
+    """The synchronous stream, iterated as it is."""
+
+    def __init__(self, stream: SyncStream) -> None:
+        """Hold the stream."""
+        self.stream = stream
+
+    def take(self, count: int) -> list[Arrival]:
+        """Return the next arrivals."""
+        return [next(self.stream) for _ in range(count)]
+
+    def held(self) -> dict[str, Live | Stale]:
+        """Return what the stream holds."""
+        return self.stream.held()
+
+    def close(self) -> None:
+        """Stop following."""
+        self.stream.close()
+
+
+class AsyncFollowing:
+    """The asynchronous stream, each arrival awaited on the driver's loop."""
+
+    def __init__(self, driver: AsyncDriver, stream: AsyncStream) -> None:
+        """Hold the driver whose loop runs it, and the stream."""
+        self.driver = driver
+        self.stream = stream
+
+    def take(self, count: int) -> list[Arrival]:
+        """Return the next arrivals."""
+        return [self.driver.run(anext(self.stream)) for _ in range(count)]
+
+    def held(self) -> dict[str, Live | Stale]:
+        """Return what the stream holds."""
+        return self.stream.held()
+
+    def close(self) -> None:
+        """Stop following."""
+        self.driver.run(self.stream.aclose())
+
+
 class Driver(Protocol):
     """What a test asks of a client, whichever one it is."""
+
+    def events(self, *, silence: float, reconnects: int, first_wait: float) -> Following:
+        """Follow the stream."""
+        ...
 
     def read(self, read: Read, query: Query | None = None) -> Envelope:
         """Read."""
@@ -82,6 +146,12 @@ class SyncDriver:
     def __init__(self, client: SyncClient) -> None:
         """Hold the client."""
         self.client = client
+
+    def events(self, *, silence: float, reconnects: int, first_wait: float) -> Following:
+        """Follow the stream."""
+        return SyncFollowing(
+            self.client.events(silence=silence, reconnects=reconnects, first_wait=first_wait),
+        )
 
     def read(self, read: Read, query: Query | None = None) -> Envelope:
         """Read."""
@@ -142,6 +212,11 @@ class AsyncDriver:
     def run[T](self, call: Coroutine[object, object, T]) -> T:
         """Run one call to completion."""
         return self.runner.run(call)
+
+    def events(self, *, silence: float, reconnects: int, first_wait: float) -> Following:
+        """Follow the stream."""
+        stream = self.client.events(silence=silence, reconnects=reconnects, first_wait=first_wait)
+        return AsyncFollowing(self, stream)
 
     def read(self, read: Read, query: Query | None = None) -> Envelope:
         """Read."""
