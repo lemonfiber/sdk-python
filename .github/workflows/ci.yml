@@ -189,9 +189,14 @@ jobs:
         run: uv sync --locked
       - name: Mutate, and hold the score to its minimum
         run: uv run just mutation
-      - name: The mutants that survived
+      - name: The mutants that survived, each as the change it made
         if: ${{ failure() }}
-        run: uv run mutmut results
+        run: |
+          set -euo pipefail
+          survived="$(uv run mutmut results | awk -F: '/: survived$/ { gsub(/^[ \t]+/, "", $1); print $1 }')"
+          for mutant in ${survived}; do
+            uv run mutmut show "${mutant}"
+          done
 
   # A library's promise to its consumers, checked against each commit one of
   # them vendors. It needs the whole history, to load those commits, and the

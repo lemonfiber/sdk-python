@@ -2,7 +2,7 @@
 """The envelope every answer arrives in, read and refused where it cannot be spoken."""
 
 import json
-from typing import TYPE_CHECKING, Final, cast
+from typing import TYPE_CHECKING, Final, TypeIs, cast
 
 from lemonfiber._generated.contract import CONTRACT_API_VERSION, KINDS, Envelope, Kind, KindNarrowing
 from lemonfiber.problems import (
@@ -25,26 +25,35 @@ def read_envelope(document: object) -> Envelope:
     The version is checked before anything else is read: an answer in a version
     this package does not speak is refused whole, naming both versions.
     """
-    if not isinstance(document, dict):
+    if not is_document(document):
         msg = "it is not an envelope"
         raise UnreadableResponseError(msg)
-    fields = cast("Mapping[str, object]", document)
-    version = fields.get("api_version")
+    version = document.get("api_version")
     if not isinstance(version, int) or isinstance(version, bool):
         msg = "it carries no api_version"
         raise UnreadableResponseError(msg)
     if version != SPOKEN_API_VERSION:
         raise ApiVersionMismatchError(SPOKEN_API_VERSION, version)
-    kind = fields.get("kind")
+    kind = document.get("kind")
     if not isinstance(kind, str) or not kind:
         msg = "it names no kind"
         raise UnreadableResponseError(msg)
-    if "data" not in fields:
+    if "data" not in document:
         msg = "it carries no data"
         raise UnreadableResponseError(msg)
-    if kind not in KINDS:
+    if not is_known(document):
         raise UnknownKindError(kind)
-    return cast("Envelope", fields)
+    return document
+
+
+def is_document(value: object) -> TypeIs[Mapping[str, object]]:
+    """Tell whether a decoded value is a JSON object."""
+    return isinstance(value, dict)
+
+
+def is_known(fields: Mapping[str, object]) -> TypeIs[Envelope]:
+    """Tell whether an envelope's kind is one this package was generated with."""
+    return fields.get("kind") in KINDS
 
 
 def parse_envelope(body: bytes | str) -> Envelope:

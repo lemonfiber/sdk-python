@@ -76,6 +76,9 @@ also_copy = ["contract/", "scripts/"]
 # The architecture tests read the tree as files, and under mutation the tree is
 # mutmut's rewrite of it; they kill no mutant and are run by `ci` instead.
 pytest_add_cli_args_test_selection = ["tests/", "--ignore=tests/test_architecture.py"]
+# `typing.cast` has no effect at run time, so a mutant of its type argument is one
+# no test could tell apart. A line holding a cast holds nothing else to mutate.
+do_not_mutate_patterns = ["\\bcast\\("]
 
 [tool.lemonfiber.mutation]
 # The share of mutants the suite must tell apart from the code, as a percentage.

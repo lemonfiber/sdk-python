@@ -40,8 +40,10 @@ def test_another_version_is_refused_naming_both() -> None:
         read_envelope({**STATUS, "api_version": SPOKEN_API_VERSION + 1})
     assert refused.value.spoken == SPOKEN_API_VERSION
     assert refused.value.served == SPOKEN_API_VERSION + 1
-    assert f"version {SPOKEN_API_VERSION} " in str(refused.value)
-    assert f"version {SPOKEN_API_VERSION + 1}." in str(refused.value)
+    assert str(refused.value) == (
+        f"This client speaks version {SPOKEN_API_VERSION} of lemonfiber's interface and the stack answered "
+        f"in version {SPOKEN_API_VERSION + 1}. Nothing from that answer was used; update whichever of the two is older."
+    )
 
 
 def test_the_version_is_refused_before_the_rest_is_read() -> None:
@@ -75,15 +77,19 @@ def test_null_data_is_still_data() -> None:
 
 @pytest.mark.parametrize("body", [b"<html>", b"\xff\xfe", "", "[" * 100_000])
 def test_a_body_that_is_not_json_is_refused(body: bytes | str) -> None:
-    with pytest.raises(UnreadableResponseError, match="it is not JSON"):
+    with pytest.raises(UnreadableResponseError) as refused:
         parse_envelope(body)
+    assert refused.value.what == "it is not JSON"
 
 
 def test_a_kind_this_package_was_not_generated_with_is_refused_by_name() -> None:
     with pytest.raises(UnknownKindError) as refused:
         read_envelope({**STATUS, "kind": "from-the-future"})
     assert refused.value.kind == "from-the-future"
-    assert "'from-the-future'" in str(refused.value)
+    assert str(refused.value) == (
+        "The stack answered with a 'from-the-future' document, which this client does not know. "
+        "The stack is newer than this client; update the client."
+    )
 
 
 def test_an_envelope_narrows_to_the_kind_it_is() -> None:
