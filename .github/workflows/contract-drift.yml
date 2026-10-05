@@ -1,0 +1,136 @@
+# The vendored contract is a copy, and a copy goes stale in silence.
+#
+# `just contract-check` regenerates the shapes from the *vendored* artefact and
+# diffs the result, so it proves this package agrees with itself and says nothing
+# about what it agrees with. There is no dependency on lemonfiber to bump, and
+# `api_version` describes the envelope rather than the set of kinds inside it, so
+# a client generated from a stale artefact parses every reply it understands and
+# has no type for the rest. This compares the copy with what the server serves,
+# runs on pull requests, fails them, and `main` requires it (`Q-R68`).
+#
+# The pin is meant to lag, and gating it does refuse pull requests that have
+# nothing to do with the contract. That is the trade, taken deliberately: the
+# stretch it refuses is the stretch this package would spend shipping against an
+# artefact it has been told is wrong. What makes it payable is that a failure
+# hands over the remedy rather than the diagnosis (`Q-R70`) — two commands, with
+# the revision already filled in, printed where the author reads the failure.
+name: contract-drift
+on:
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    # Weekly, as the floor: a pull request is what usually asks the question,
+    # and this catches a `main` that went a week without one while the server
+    # moved.
+    - cron: "20 7 * * 1"
+
+permissions:
+  contents: read
+
+# A pull request pushed again cancels the run on its old head, which nobody
+# will read and which holds runners the org shares (Q-R75). Every other event
+# is grouped by its own run, so it is never cancelled and never cancels.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  contract-drift:
+    name: contract-drift
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Compare the vendored contract with the one the server describes
+        env:
+          LEMONFIBER: https://github.com/lemonfiber/lemonfiber.git
+        run: |
+          set -euo pipefail
+
+          # The revision is resolved first and the artefact fetched at it, so the
+          # comparison and the command printed to fix it name the same commit.
+          # Fetching `main` twice would let it move in between, and the remedy
+          # would then be for a contract nobody compared.
+          head=$(git ls-remote "$LEMONFIBER" refs/heads/main | cut -f1)
+
+          # `-L` follows redirects, and a redirect may point anywhere. These refuse
+          # any hop that is not HTTPS, so what is fetched cannot be downgraded.
+          curl -fsSL --proto "=https" --proto-redir "=https" --retry 3 -o served.json \
+            "https://raw.githubusercontent.com/lemonfiber/lemonfiber/${head}/contract/web-api.contract.json"
+
+          HEAD_REVISION="$head" python3 - <<'PY'
+          import json
+          import os
+          import pathlib
+          import sys
+
+          # What the run page shows above the log. The verdict is written here as
+          # well as printed, because a required check is read from the pull
+          # request, where the log is one click further away than the summary.
+          summary = os.environ.get("GITHUB_STEP_SUMMARY")
+          said = []
+
+
+          def say(line=""):
+              print(line)
+              said.append(line)
+
+
+          def leave(code):
+              if summary is not None:
+                  pathlib.Path(summary).write_text("\n".join(said) + "\n")
+              sys.exit(code)
+
+
+          head = os.environ["HEAD_REVISION"]
+          vendored = json.loads(pathlib.Path("contract/web-api.contract.json").read_text())
+          served = json.loads(pathlib.Path("served.json").read_text())
+          stamp = pathlib.Path("contract/VERSION").read_text().strip()
+
+          ours = set(vendored.get("kinds", {}))
+          theirs = set(served.get("kinds", {}))
+
+          if vendored == served:
+              say("## The vendored contract is current")
+              say()
+              say(f"It matches the one lemonfiber `{head}` describes, vendored at `{stamp}`.")
+              leave(0)
+
+          missing = sorted(theirs - ours)
+          extra = sorted(ours - theirs)
+
+          say("## The vendored contract is behind")
+          say()
+          say("**This check gates.** It fails every pull request against `main` until")
+          say("the artefact in `contract/` is the one lemonfiber serves. You did not")
+          say("break this and you do not need to understand the kinds below to fix it.")
+          say()
+          say(f"- vendored at `{stamp}`: api_version {vendored.get('api_version')}, {len(ours)} kinds")
+          say(f"- served at lemonfiber `{head}`: api_version {served.get('api_version')}, {len(theirs)} kinds")
+          if missing:
+              say(f"- described by the server and not here: {', '.join(missing)}")
+          if extra:
+              say(f"- described here and not by the server: {', '.join(extra)}")
+          if not missing and not extra:
+              say("- the same kinds, described differently — a shape changed inside one of them.")
+          say()
+          say("### Run this")
+          say()
+          say("```sh")
+          say(f"uv run just sync {head}")
+          say("uv run just generate")
+          say("```")
+          say()
+          say("Then commit `contract/` and `src/lemonfiber/_generated`. Where that regenerates more")
+          say("than types — a kind arriving is a change to this package's surface — land")
+          say("the sync on its own first; that is the change this gate is asking for.")
+
+          print(
+              "::error::the vendored contract is behind lemonfiber "
+              f"{head} — run `uv run just sync {head}` then "
+              "`uv run just generate`, and commit contract/ and src/lemonfiber/_generated"
+          )
+          leave(1)
+          PY
