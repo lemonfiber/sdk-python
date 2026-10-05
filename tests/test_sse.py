@@ -1,9 +1,12 @@
 # Copyright (c) 2026 NightWorksIO
 """Reading the event-stream format a chunk at a time."""
 
+import time
+
 import pytest
 
-from lemonfiber._sse import Event, Parser
+from lemonfiber import UnreadableResponseError
+from lemonfiber._sse import LARGEST, Event, Parser
 
 
 def test_an_event_is_its_id_name_and_data() -> None:
@@ -43,3 +46,40 @@ def test_a_character_split_across_chunks_arrives_whole() -> None:
     encoded = "data: café\n\n".encode()
     assert parser.push(encoded[:10]) == []
     assert parser.push(encoded[10:]) == [Event(None, "message", "café")]
+
+
+def test_a_line_longer_than_an_event_may_be_is_refused_before_it_is_held() -> None:
+    parser = Parser(largest=10)
+    assert parser.push(b"data: 1234") == []
+    with pytest.raises(UnreadableResponseError) as refused:
+        parser.push(b"5")
+    assert refused.value.what == "the stream carried a line longer than the 10 characters an event may be"
+
+
+def test_an_event_larger_than_an_event_may_be_is_refused_before_it_completes() -> None:
+    parser = Parser(largest=10)
+    assert parser.push(b"data: 12345\ndata: 1234\n") == []
+    with pytest.raises(UnreadableResponseError) as refused:
+        parser.push(b"data: 6\n")
+    assert refused.value.what == "the stream carried an event larger than the 10 characters an event may be"
+
+
+def test_an_event_as_large_as_an_event_may_be_arrives() -> None:
+    parser = Parser(largest=10)
+    assert parser.push(b"data: 12345\ndata: 1234\n\n") == [Event(None, "message", "12345\n1234")]
+
+
+def test_an_event_may_be_megabytes() -> None:
+    assert LARGEST == 16 * 1024 * 1024
+    assert Parser().push(b"data: " + b"x" * (4 * 1024 * 1024) + b"\n\n")[0].data == "x" * (4 * 1024 * 1024)
+
+
+def test_a_long_line_arriving_in_small_chunks_is_read_in_time_proportional_to_it() -> None:
+    parser = Parser()
+    started = time.monotonic()
+    for _ in range(2048):
+        parser.push(b"x" * 128)
+    assert parser.push(b"\n\n") == []
+    many = parser.push(b"data: 1\n\n" * 20000)
+    assert len(many) == 20000
+    assert time.monotonic() - started < 2.0

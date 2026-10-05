@@ -4,6 +4,7 @@
 import asyncio
 from typing import TYPE_CHECKING
 
+import aiohttp
 import pytest
 
 from lemonfiber import (
@@ -14,6 +15,7 @@ from lemonfiber import (
     AsyncClient,
     Break,
     CertificateRefusedError,
+    ConfigurationError,
     Credential,
     Gap,
     Live,
@@ -193,8 +195,9 @@ def test_a_kind_this_package_does_not_know_is_named_and_not_handed_over(client: 
 def test_the_stream_is_held_to_the_pin(flavour: Flavour, tls_stack: Stack) -> None:
     tls_stack.reply("GET", "/api/events", Streamed([(0, event("news", NEWS["data"]))], hold=1))
     wrong = connect(flavour, Address(tls_stack.url, pin="0" * 64), Credential(PRINTED))
-    with pytest.raises(CertificateRefusedError):
+    with pytest.raises(CertificateRefusedError) as refused:
         follow(wrong).take(1)
+    assert refused.value.__context__ is None
     wrong.close()
     assert tls_stack.arrived == []
     right = connect(flavour, Address(tls_stack.url, pin=tls_stack.pin), Credential(PRINTED))
@@ -248,3 +251,33 @@ def test_the_asynchronous_stream_iterates_and_closes_as_a_context(stack: Stack) 
         raise AssertionError
 
     assert asyncio.run(follow_once()) == Live(NEWS)
+
+
+def test_a_named_address_is_followed_where_it_resolved_when_given(flavour: Flavour, stack: Stack) -> None:
+    stack.reply("GET", "/api/events", Streamed([(0, event("news", NEWS["data"]))], hold=1))
+    port = stack.url.rsplit(":", 1)[1]
+    named = Address(f"http://stack.invalid:{port}", resolver=lambda _: ["::1", "127.0.0.1"])
+    driver = connect(flavour, named, Credential(PRINTED))
+    stream = follow(driver)
+    assert stream.take(1) == [Live(NEWS)]
+    stream.close()
+    driver.close()
+    assert stack.arrived[0].headers["Host"] == f"stack.invalid:{port}"
+
+
+def test_the_stream_is_never_followed_through_a_callers_proxy(stack: Stack) -> None:
+    stack.reply("GET", "/api/events", Streamed([(0, event("news", NEWS["data"]))], hold=1))
+
+    async def follow_through_a_proxy() -> None:
+        session = aiohttp.ClientSession(proxy=stack.url)
+        try:
+            client = AsyncClient(Address(stack.url), Credential(PRINTED), session=session)
+            async with client.events(silence=QUICK) as stream:
+                await anext(stream)
+        finally:
+            await session.close()
+            await asyncio.sleep(0)
+
+    with pytest.raises(ConfigurationError):
+        asyncio.run(follow_through_a_proxy())
+    assert stack.arrived == []
