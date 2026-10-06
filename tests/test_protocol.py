@@ -1,13 +1,15 @@
 # Copyright (c) 2026 NightWorksIO
-"""What goes on the wire, exactly, and how the transports are built to carry it."""
+"""What goes on the wire, exactly, what each answer is read as, and how the transports are built to carry it."""
 
 import json
+from http import HTTPMethod
 
 import aiohttp
 import pytest
 import urllib3
 
-from lemonfiber import Address, Credential, Read, _aio, _sync, _wire
+from lemonfiber import Address, Credential, Read, _aio, _sync
+from lemonfiber._protocol import calls, following, operation, refusals
 from lemonfiber.address import Route
 from lemonfiber.problems import StillRunningError
 
@@ -16,50 +18,76 @@ SENT = {"Accept": "application/json", "Content-Type": "application/json"}
 
 
 def test_each_call_is_the_request_it_names() -> None:
-    assert _wire.read_call(Read.STATUS, None) == _wire.Call("GET", "/api/status", JSON)
-    assert _wire.read_call(Read.STATUS, {}) == _wire.Call("GET", "/api/status", JSON)
-    assert _wire.read_call(Read.FRONT_DOOR, {"a": 1}) == _wire.Call("GET", "/api/front-door?a=1", JSON)
-    assert _wire.logs_call({"service": "x"}) == _wire.Call("GET", "/api/logs?service=x", JSON)
-    assert _wire.bundle_call("a/b c") == _wire.Call("GET", "/api/bundle/a%2Fb%20c", {"Accept": "*/*"})
-    assert _wire.action_call("re/pair", {"x": [1]}) == _wire.Call(
-        "POST",
+    assert calls.read_call(Read.STATUS, None) == calls.Call(HTTPMethod.GET, "/api/status", JSON)
+    assert calls.read_call(Read.STATUS, {}) == calls.Call(HTTPMethod.GET, "/api/status", JSON)
+    assert calls.read_call(Read.FRONT_DOOR, {"a": 1}) == calls.Call(
+        HTTPMethod.GET,
+        "/api/front-door?a=1",
+        JSON,
+    )
+    assert calls.logs_call({"service": "x"}) == calls.Call(HTTPMethod.GET, "/api/logs?service=x", JSON)
+    assert calls.bundle_call("a/b c") == calls.Call(
+        HTTPMethod.GET,
+        "/api/bundle/a%2Fb%20c",
+        {"Accept": "*/*"},
+    )
+    assert calls.action_call("re/pair", {"x": [1]}) == calls.Call(
+        HTTPMethod.POST,
         "/api/actions/re%2Fpair",
         SENT,
         json.dumps({"x": [1]}).encode(),
     )
-    assert _wire.job_call("j/1", "GET") == _wire.Call("GET", "/api/jobs/j%2F1", JSON)
-    assert _wire.job_call("j", "DELETE") == _wire.Call("DELETE", "/api/jobs/j", JSON)
-    assert _wire.session_call("pw", None) == _wire.Call("POST", "/api/session", SENT, b'{"password": "pw"}')
+    assert calls.job_call("j/1", HTTPMethod.GET) == calls.Call(HTTPMethod.GET, "/api/jobs/j%2F1", JSON)
+    assert calls.job_call("j", HTTPMethod.DELETE) == calls.Call(HTTPMethod.DELETE, "/api/jobs/j", JSON)
+    assert calls.session_call("pw", None) == calls.Call(
+        HTTPMethod.POST,
+        "/api/session",
+        SENT,
+        b'{"password": "pw"}',
+    )
+
+
+def test_each_operation_pairs_its_call_with_the_reading_of_its_answer() -> None:
+    assert operation.reading(Read.STATUS, None).call == calls.read_call(Read.STATUS, None)
+    assert operation.capabilities().call == calls.capabilities_call()
+    assert operation.logs(None).call == calls.logs_call(None)
+    assert operation.bundle("b").call == calls.bundle_call("b")
+    assert operation.action("restart", None).call == calls.action_call("restart", None)
+    assert operation.job("j").call == calls.job_call("j", HTTPMethod.GET)
+    assert operation.release("j").call == calls.job_call("j", HTTPMethod.DELETE)
+    assert operation.admission("pw", "ada").call == calls.session_call("pw", "ada")
+    handed = operation.bundle("b").read(calls.Answer(200, {"content-type": "x"}, b"z"))
+    assert (handed.name, handed.content, handed.content_type) == ("b", b"z", "x")
 
 
 def test_the_credential_is_added_to_a_calls_headers_alone() -> None:
-    call = _wire.with_credential(_wire.read_call(Read.STATUS, None), Credential("abc"))
-    assert call == _wire.Call("GET", "/api/status", {**JSON, "X-Lemonfiber-Token": "abc"})
+    call = calls.with_credential(calls.read_call(Read.STATUS, None), Credential("abc"))
+    assert call == calls.Call(HTTPMethod.GET, "/api/status", {**JSON, "X-Lemonfiber-Token": "abc"})
 
 
 def test_the_wait_between_asking_about_work_shortens_to_what_is_left_and_stops_at_the_limit() -> None:
-    assert _wire.next_wait("j", 10.0, 11.0, 2.0, None) == 2.0
-    assert _wire.next_wait("j", 10.0, 11.0, 2.0, 5.0) == 2.0
-    assert _wire.next_wait("j", 10.0, 14.0, 2.0, 5.0) == 1.0
+    assert following.next_wait("j", 10.0, 11.0, 2.0, None) == 2.0
+    assert following.next_wait("j", 10.0, 11.0, 2.0, 5.0) == 2.0
+    assert following.next_wait("j", 10.0, 14.0, 2.0, 5.0) == 1.0
     with pytest.raises(StillRunningError) as refused:
-        _wire.next_wait("j", 10.0, 15.0, 2.0, 5.0)
+        following.next_wait("j", 10.0, 15.0, 2.0, 5.0)
     assert refused.value.waited == 5.0
 
 
 def test_a_refusal_whose_body_is_not_utf8_is_still_read() -> None:
-    refused = _wire.refusal_of(_wire.Answer(500, {}, b"broken \xff words"))
+    refused = refusals.refusal_of(calls.Answer(500, {}, b"broken \xff words"))
     assert str(refused) == "broken � words"
 
 
 def test_an_error_envelope_whose_data_is_not_a_problem_carries_none() -> None:
     body = json.dumps({"api_version": 1, "kind": "error", "data": "words"}).encode()
-    assert _wire.problem_in(body) is None
-    assert isinstance(_wire.refusal_of(_wire.Answer(500, {}, body)), _aio.UnreachableError)
+    assert refusals.problem_in(body) is None
+    assert isinstance(refusals.refusal_of(calls.Answer(500, {}, body)), _aio.UnreachableError)
 
 
 @pytest.mark.parametrize(("said", "seconds"), [("12", 12), (" 7 ", 7), ("soon", None), ("", None)])
 def test_retry_after_is_read_as_a_count_of_seconds(said: str, seconds: int | None) -> None:
-    assert _wire.retry_after(_wire.Answer(429, {"retry-after": said}, b"")) == seconds
+    assert refusals.retry_after(calls.Answer(429, {"retry-after": said}, b"")) == seconds
 
 
 def only_pool(address: Address) -> urllib3.HTTPConnectionPool:
