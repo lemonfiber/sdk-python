@@ -5,6 +5,12 @@ on:
   push:
     branches: [main]
 
+# Every `uv` a recipe runs inside these steps syncs as the steps do: from the
+# lockfile and nothing else, building no source distribution.
+env:
+  UV_LOCKED: "1"
+  UV_NO_BUILD: "1"
+
 permissions:
   contents: read
 
@@ -139,13 +145,13 @@ jobs:
           persist-credentials: false
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       - name: Install exactly what the lockfile says
-        run: uv sync --locked
+        run: uv sync --locked --no-build
       - name: Formatting and lint
-        run: uv run just lint
+        run: uv run --locked --no-build just lint
       - name: Strict types
-        run: uv run just types
+        run: uv run --locked --no-build just types
       - name: The generated contract is what the generator writes
-        run: uv run just contract-check
+        run: uv run --locked --no-build just contract-check
 
   tests:
     name: tests and coverage
@@ -159,9 +165,9 @@ jobs:
           persist-credentials: false
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       - name: Install exactly what the lockfile says
-        run: uv sync --locked
+        run: uv sync --locked --no-build
       - name: The suite, with 100% line and branch coverage
-        run: uv run just coverage
+        run: uv run --locked --no-build just coverage
 
   # The most expensive gate, so the most guarded: only on a pull request, and
   # only once the tests have passed. Mutating code whose tests already fail
@@ -186,16 +192,16 @@ jobs:
           persist-credentials: false
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       - name: Install exactly what the lockfile says
-        run: uv sync --locked
+        run: uv sync --locked --no-build
       - name: Mutate, and hold the score to its minimum
-        run: uv run just mutation
+        run: uv run --locked --no-build just mutation
       - name: The mutants that survived, each as the change it made
         if: ${{ failure() }}
         run: |
           set -euo pipefail
-          survived="$(uv run mutmut results | awk -F: '/: survived$/ { gsub(/^[ \t]+/, "", $1); print $1 }')"
+          survived="$(uv run --locked --no-build mutmut results | awk -F: '/: survived$/ { gsub(/^[ \t]+/, "", $1); print $1 }')"
           for mutant in ${survived}; do
-            uv run mutmut show "${mutant}"
+            uv run --locked --no-build mutmut show "${mutant}"
           done
 
   # A library's promise to its consumers, checked against each commit one of
@@ -221,8 +227,8 @@ jobs:
           persist-credentials: false
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       - name: Install exactly what the lockfile says
-        run: uv sync --locked
+        run: uv sync --locked --no-build
       - name: Compare against every commit a consumer vendors
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: uv run just bc .spec-canonical
+        run: uv run --locked --no-build just bc .spec-canonical

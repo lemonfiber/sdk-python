@@ -6,6 +6,12 @@ on:
   # Main's analysis is what every pull request's new code is measured against.
   push:
     branches: [main]
+# Every `uv` a recipe runs inside these steps syncs as the steps do: from the
+# lockfile and nothing else, building no source distribution.
+env:
+  UV_LOCKED: "1"
+  UV_NO_BUILD: "1"
+
 # Read-only for the workflow. The one job that writes — the gate, which posts its
 # verdict on the pull request — asks for that itself.
 permissions:
@@ -29,11 +35,11 @@ jobs:
           fetch-depth: 0
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       - name: Install exactly what the lockfile says
-        run: uv sync --locked
+        run: uv sync --locked --no-build
       # The same recipe the `tests and coverage` job runs, so the coverage the scan
       # reports is the coverage the gate held to 100%.
       - name: The suite, with 100% line and branch coverage
-        run: uv run just coverage
+        run: uv run --locked --no-build just coverage
       # A Dependabot run reads secrets from the Dependabot store, and `SONAR_TOKEN`
       # is only in the Actions store, so the scan is skipped there rather than
       # failing on an empty token. The suite above needs no token and runs either

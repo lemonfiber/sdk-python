@@ -40,6 +40,11 @@ build-backend = "uv_build"
 
 [tool.uv]
 required-version = ">=0.11"
+# The package is read from `src/` where it stands rather than installed, so a
+# sync builds nothing: every dependency comes from the wheel `uv.lock` pins,
+# and CI syncs with `--no-build`, which refuses anything that would run a
+# setup script. `uv build` still builds the package.
+package = false
 
 [tool.pyright]
 include = ["src", "tests", "scripts"]
@@ -56,18 +61,26 @@ reportUninitializedInstanceVariable = "error"
 [tool.pytest.ini_options]
 minversion = "9.1"
 testpaths = ["tests"]
+pythonpath = ["src"]
 addopts = ["--strict-markers", "--strict-config", "-ra"]
 xfail_strict = true
 filterwarnings = ["error"]
 
 [tool.coverage.run]
 branch = true
-source = ["lemonfiber"]
+# The scripts are measured as the package is: SonarQube Cloud analyses both.
+# `no_open_codeql_alert.py` is the spec's shared gate, byte-identical to its
+# home copy, and measured and analysed there.
+source = ["src/lemonfiber", "scripts"]
+omit = ["scripts/no_open_codeql_alert.py"]
 
 [tool.coverage.report]
 fail_under = 100
 show_missing = true
 skip_covered = true
+# A script's entry point hands the process its exit code. What it calls is
+# measured; the call from the interpreter is not something a test makes.
+exclude_also = ['if __name__ == "__main__":']
 
 [tool.mutmut]
 source_paths = ["src/"]

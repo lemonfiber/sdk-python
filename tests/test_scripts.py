@@ -5,8 +5,10 @@ import base64
 import http.client
 import io
 import json
+import sys
+import urllib.error
 import urllib.request
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Self
 
 import pytest
 
@@ -64,8 +66,9 @@ def test_a_revision_serving_nothing_is_refused(tmp_path: pathlib.Path) -> None:
 def test_a_redirect_off_https_is_refused() -> None:
     handler = contract_sync.HttpsOnly()
     request = urllib.request.Request("https://raw.githubusercontent.com/x")
+    body, headers = io.BytesIO(), http.client.HTTPMessage()
     with pytest.raises(contract_sync.SyncRefusedError, match="not HTTPS"):
-        handler.redirect_request(request, io.BytesIO(), 302, "Found", http.client.HTTPMessage(), "http://x")
+        handler.redirect_request(request, body, 302, "Found", headers, "http://x")
 
 
 def test_a_redirect_to_https_is_followed() -> None:
@@ -81,6 +84,80 @@ def test_a_redirect_to_https_is_followed() -> None:
     )
     assert followed is not None
     assert followed.full_url == "https://y"
+
+
+class Served:
+    """An answer an opener hands back, holding these bytes."""
+
+    def __init__(self, body: bytes) -> None:
+        """Hold the bytes the answer reads."""
+        super().__init__()
+        self.body = body
+
+    def __enter__(self) -> Self:
+        """Open the answer, as `with` does."""
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        """Close the answer, holding nothing to close."""
+
+    def read(self) -> bytes:
+        """Return the bytes served."""
+        return self.body
+
+
+class Opener:
+    """An opener answering every request with one answer, or one refusal."""
+
+    def __init__(self, answer: Served | Exception) -> None:
+        """Answer every request with this, or raise it."""
+        super().__init__()
+        self.answer = answer
+        self.asked: list[urllib.request.Request | str] = []
+        self.timeouts: list[float] = []
+
+    def open(self, request: urllib.request.Request | str, timeout: float) -> Served:
+        """Record what was asked and how long it could take, then answer."""
+        self.asked.append(request)
+        self.timeouts.append(timeout)
+        if isinstance(self.answer, Exception):
+            raise self.answer
+        return self.answer
+
+
+def opening(monkeypatch: pytest.MonkeyPatch, answer: Served | Exception) -> Opener:
+    """Make every opener a script builds this one."""
+    opener = Opener(answer)
+
+    def build(*_handlers: urllib.request.BaseHandler) -> Opener:
+        return opener
+
+    monkeypatch.setattr(urllib.request, "build_opener", build)
+    return opener
+
+
+def refused(code: int) -> urllib.error.HTTPError:
+    """Return GitHub refusing with this status, holding an empty body to close."""
+    return urllib.error.HTTPError(
+        "https://api.github.com/x",
+        code,
+        "refused",
+        http.client.HTTPMessage(),
+        io.BytesIO(),
+    )
+
+
+def test_an_artefact_is_fetched_from_the_revision_it_names(monkeypatch: pytest.MonkeyPatch) -> None:
+    opener = opening(monkeypatch, Served(SERVED))
+    assert contract_sync.fetch(REVISION) == SERVED
+    assert opener.asked == [contract_sync.SERVED.format(revision=REVISION)]
+    assert opener.timeouts == [contract_sync.TIMEOUT_SECONDS]
+
+
+def test_an_artefact_that_cannot_be_reached_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
+    opening(monkeypatch, urllib.error.URLError("unreachable"))
+    with pytest.raises(contract_sync.SyncRefusedError, match=f"{REVISION} serves no artefact"):
+        contract_sync.fetch(REVISION)
 
 
 def write_score(root: pathlib.Path, stats: dict[str, int], minimum: int = 90) -> None:
@@ -266,3 +343,97 @@ def test_a_bump_refuses_any_change_it_does_not_make(
     captured = capsys.readouterr()
     assert captured.out == ""
     assert captured.err == f"::error::{said}\n"
+
+
+def test_github_is_asked_with_the_token_and_answers_json(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GITHUB_TOKEN", "a-token")
+    opener = opening(monkeypatch, Served(b'{"tree": []}'))
+    assert backward_compat.github("/repos/x") == {"tree": []}
+    (asked,) = opener.asked
+    assert isinstance(asked, urllib.request.Request)
+    assert asked.full_url == "https://api.github.com/repos/x"
+    assert asked.get_header("Authorization") == "Bearer a-token"
+    assert opener.timeouts == [backward_compat.TIMEOUT_SECONDS]
+
+
+def test_github_is_asked_without_a_token_where_there_is_none(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    opener = opening(monkeypatch, Served(b"[]"))
+    assert backward_compat.github("/repos/x") == []
+    (asked,) = opener.asked
+    assert isinstance(asked, urllib.request.Request)
+    assert asked.get_header("Authorization") is None
+
+
+@pytest.mark.parametrize("code", [404, 409])
+def test_a_missing_or_empty_repository_answers_nothing(monkeypatch: pytest.MonkeyPatch, code: int) -> None:
+    with refused(code) as refusal:
+        opening(monkeypatch, refusal)
+        assert backward_compat.github("/repos/x") is None
+
+
+def test_any_other_refusal_is_raised(monkeypatch: pytest.MonkeyPatch) -> None:
+    with refused(500) as refusal:
+        opening(monkeypatch, refusal)
+        with pytest.raises(urllib.error.HTTPError):
+            backward_compat.github("/repos/x")
+
+
+class Breakage:
+    """A breaking change griffe found, explained in these words."""
+
+    def __init__(self, said: str) -> None:
+        """Hold the explanation."""
+        super().__init__()
+        self.said = said
+
+    def explain(self) -> str:
+        """Return the explanation."""
+        return self.said
+
+
+def test_a_breakage_is_what_griffe_finds_between_the_pin_and_the_tree(
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    loaded: list[tuple[str, dict[str, object]]] = []
+
+    def load_git(package: str, **given: object) -> str:
+        loaded.append((package, given))
+        return "at the pin"
+
+    def load(package: str, **given: object) -> str:
+        loaded.append((package, given))
+        return "in the tree"
+
+    def find_breaking_changes(old: str, new: str) -> list[Breakage]:
+        return [Breakage(f"{old} to {new}")]
+
+    monkeypatch.setattr(backward_compat.griffe, "load_git", load_git)
+    monkeypatch.setattr(backward_compat.griffe, "load", load)
+    monkeypatch.setattr(backward_compat.griffe, "find_breaking_changes", find_breaking_changes)
+    assert backward_compat.breakages(REVISION, tmp_path) == ["at the pin to in the tree"]
+    assert loaded == [
+        (backward_compat.PACKAGE, {"ref": REVISION, "repo": tmp_path, "search_paths": ["src"]}),
+        (backward_compat.PACKAGE, {"search_paths": [str(tmp_path / "src")]}),
+    ]
+
+
+def test_the_command_line_names_the_spec_and_the_tree(
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    asked: list[tuple[pathlib.Path, pathlib.Path]] = []
+
+    def checking(spec: pathlib.Path, repo: pathlib.Path) -> int:
+        asked.append((spec, repo))
+        return 1
+
+    monkeypatch.setattr(backward_compat, "run", checking)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["backward_compat.py", "--spec", str(tmp_path / "s"), "--repo", str(tmp_path)],
+    )
+    assert backward_compat.main() == 1
+    assert asked == [(tmp_path / "s", tmp_path)]

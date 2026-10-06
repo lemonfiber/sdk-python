@@ -41,7 +41,7 @@ def problems(status: str) -> tuple[list[str], list[str]]:
             )
         elif "D" in letters:
             found.append(f"deleted {name}, and the commit a bump makes carries additions only")
-        elif not letters <= ADDED_OR_CHANGED:
+        elif letters - ADDED_OR_CHANGED:
             found.append(
                 f"{name} stands as {entry[:2]!r} in git's status, which syncing and generating never leave",
             )

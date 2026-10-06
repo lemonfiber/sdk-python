@@ -16,7 +16,7 @@ import pathlib
 import re
 import sys
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, NoReturn, cast
+from typing import TYPE_CHECKING, NoReturn, TypeIs, cast
 
 from scripts.contract_sync import REVISION
 
@@ -74,7 +74,7 @@ SCREAMING_SNAKE = re.compile(r"^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$")
 REFUSAL_STATUSES = range(400, 600)
 """The statuses a refusal may be answered with: the request's fault or the machine's."""
 
-DEFINITION = re.compile(r"^[A-Z][A-Za-z0-9_]*$")
+DEFINITION = re.compile(r"^[A-Z]\w*$", re.ASCII)
 """A definition's name, as the artefact spells one."""
 
 REFERENCE = re.compile(r"^#/\$defs/([^/]+)$")
@@ -104,6 +104,31 @@ OWNED = {
 
 class ArtefactRefusedError(Exception):
     """The artefact cannot be generated from, and nothing was written."""
+
+
+def is_list(node: object) -> TypeIs[list[object]]:
+    """Tell whether a decoded JSON value is an array."""
+    return isinstance(node, list)
+
+
+def is_map(node: object) -> TypeIs[dict[str, object]]:
+    """Tell whether a decoded JSON value is an object, whose keys JSON makes strings."""
+    return isinstance(node, dict)
+
+
+def as_list(node: object) -> list[object]:
+    """Read a JSON array a validated schema holds as the list it decodes to."""
+    return cast("list[object]", node)
+
+
+def as_map(node: object) -> dict[str, object]:
+    """Read a JSON object a validated schema holds as the dict it decodes to."""
+    return cast("dict[str, object]", node)
+
+
+def as_maps(node: object) -> dict[str, dict[str, object]]:
+    """Read a JSON object of JSON objects the artefact holds as the dicts it decodes to."""
+    return cast("dict[str, dict[str, object]]", node)
 
 
 def refuse(message: str) -> NoReturn:
@@ -160,17 +185,16 @@ def ambiguous(node: object, path: str) -> Iterator[str]:
     Draft-07 readers discard whatever accompanies a `$ref` and 2020-12 readers
     apply both, so such a shape means two different things to two readers.
     """
-    if isinstance(node, list):
-        for at, item in enumerate(cast("list[object]", node)):
+    if is_list(node):
+        for at, item in enumerate(node):
             yield from ambiguous(item, f"{path}/{at}")
         return
-    if not isinstance(node, dict):
+    if not is_map(node):
         return
-    named = cast("dict[str, object]", node)
-    constraints = sorted(key for key in named if key != "$ref" and key not in ANNOTATIONS)
-    if "$ref" in named and constraints:
+    constraints = sorted(key for key in node if key != "$ref" and key not in ANNOTATIONS)
+    if "$ref" in node and constraints:
         yield f"{path} ({', '.join(constraints)})"
-    for key, value in named.items():
+    for key, value in node.items():
         yield from ambiguous(value, f"{path}/{key}")
 
 
@@ -178,10 +202,10 @@ def malformed_refusal(code: str, entry: object) -> Iterator[str]:
     """Yield everything wrong with one listed refusal, as lines naming its code."""
     if not CODE.fullmatch(code):
         yield f"{json.dumps(code)}: not a code, which is a prefix and a number"
-    if not isinstance(entry, dict):
+    if not is_map(entry):
         yield f"{code}: not an object"
         return
-    listed = cast("dict[str, object]", entry)
+    listed = entry
     name = listed.get("name")
     status = listed.get("status")
     description = listed.get("description")
@@ -191,6 +215,31 @@ def malformed_refusal(code: str, entry: object) -> Iterator[str]:
         yield f"{code}: status {json.dumps(status)} is not a refusal's status"
     if not isinstance(description, str) or not description.strip():
         yield f"{code}: description {json.dumps(description)} is not a sentence"
+
+
+@dataclass(frozen=True)
+class Field:
+    """One property of an object schema, as a TypedDict declares it."""
+
+    key: str
+    annotation: str
+    needed: bool
+    description: str | None
+
+
+def class_lines(name: str, description: str | None, fields: Sequence[Field]) -> list[str]:
+    """Return a TypedDict written as a class, every key of which is a Python name."""
+    lines = [f"class {name}(typing.TypedDict):"]
+    if description is not None:
+        lines.extend([*docstring(description, "    "), ""])
+    for one in fields:
+        annotation = one.annotation if one.needed else f"typing.NotRequired[{one.annotation}]"
+        lines.append(f"    {one.key}: {annotation}")
+        if one.description is not None:
+            lines.extend(docstring(one.description, "    "))
+    if not fields:
+        lines.append("    pass")
+    return lines
 
 
 @dataclass
@@ -310,13 +359,12 @@ class Writer:
     @staticmethod
     def node(schema: object, origin: str) -> dict[str, object]:
         """Return a schema as an object, refusing one this generator does not read."""
-        if not isinstance(schema, dict):
+        if not is_map(schema):
             refuse(f"{origin} is {json.dumps(schema)}, which is not a schema this generator reads")
-        node = cast("dict[str, object]", schema)
-        unread = sorted(set(node) - UNDERSTOOD)
+        unread = sorted(set(schema) - UNDERSTOOD)
         if unread:
             refuse(f"{origin} uses {', '.join(unread)}, which this generator does not read")
-        return node
+        return schema
 
     @staticmethod
     def types_of(node: Mapping[str, object]) -> list[str]:
@@ -326,7 +374,7 @@ class Writer:
             return []
         if isinstance(declared, str):
             return [declared]
-        return [str(one) for one in cast("list[object]", declared)]
+        return [str(one) for one in as_list(declared)]
 
     def is_object(self, node: Mapping[str, object]) -> bool:
         """Tell whether a schema is an object with properties and nothing beside it."""
@@ -334,37 +382,34 @@ class Writer:
 
     def typed_dict(self, name: str, node: Mapping[str, object], origin: str) -> None:
         """Write an object schema as a TypedDict."""
-        properties = cast("dict[str, object]", node.get("properties", {}))
+        fields = self.fields_of(name, node, origin)
+        said = node.get("description")
+        description = said if isinstance(said, str) else None
+        if all(is_field_name(one.key) for one in fields):
+            self.claim(name, origin, class_lines(name, description, fields))
+            return
+        self.claim(name, origin, [])
+        self.shapes[name].fields = [(one.key, one.annotation, one.needed) for one in fields]
+        self.shapes[name].description = description
+
+    def fields_of(self, name: str, node: Mapping[str, object], origin: str) -> list[Field]:
+        """Return the fields an object schema declares, in the order they are written."""
+        properties = as_map(node.get("properties", {}))
         required = set(cast("list[str]", node.get("required", [])))
-        fields: list[tuple[str, str, bool, str | None]] = []
+        fields: list[Field] = []
         for key in sorted(properties):
             where = f"{origin} property `{key}`"
             prop = self.node(properties[key], where)
             said = prop.get("description")
             fields.append(
-                (
+                Field(
                     key,
                     self.annotation(prop, name + pascal(key), where),
-                    key in required,
-                    said if isinstance(said, str) else None,
+                    needed=key in required,
+                    description=said if isinstance(said, str) else None,
                 ),
             )
-        description = node.get("description")
-        if all(is_field_name(key) for key, _, _, _ in fields):
-            lines = [f"class {name}(typing.TypedDict):"]
-            if isinstance(description, str):
-                lines.extend([*docstring(description, "    "), ""])
-            for key, annotation, needed, said in fields:
-                lines.append(f"    {key}: {annotation if needed else f'typing.NotRequired[{annotation}]'}")
-                if said is not None:
-                    lines.extend(docstring(said, "    "))
-            if not fields:
-                lines.append("    pass")
-            self.claim(name, origin, lines)
-            return
-        self.claim(name, origin, [])
-        self.shapes[name].fields = [(key, annotation, needed) for key, annotation, needed, _ in fields]
-        self.shapes[name].description = description if isinstance(description, str) else None
+        return fields
 
     def annotation(self, node: Mapping[str, object], name: str, origin: str) -> str:
         """Return the Python type a schema describes, naming any object it holds inline after `name`."""
@@ -377,11 +422,11 @@ class Writer:
         if "const" in node:
             return f"typing.Literal[{literal(node['const'])}]"
         if "enum" in node:
-            values = cast("list[object]", node["enum"])
+            values = as_list(node["enum"])
             return f"typing.Literal[{', '.join(literal(value) for value in values)}]"
         for combinator in ("oneOf", "anyOf"):
             if combinator in node:
-                variants = cast("list[object]", node[combinator])
+                variants = as_list(node[combinator])
                 return self.union(variants, name, f"{origin} {combinator}")
         declared = self.types_of(node)
         if not declared:
@@ -432,7 +477,7 @@ class Writer:
         for variant in variants:
             if not self.is_object(variant):
                 continue
-            properties = cast("dict[str, object]", variant["properties"])
+            properties = as_map(variant["properties"])
             constant = {key for key, prop in properties.items() if isinstance(prop, dict) and "const" in prop}
             common = constant if common is None else common & constant
         return min(common) if common else None
@@ -440,7 +485,7 @@ class Writer:
     def label(self, variant: Mapping[str, object], tag: str | None, at: int) -> str:
         """Return what a variant is called after its union: its tag's value, or its place."""
         if tag is not None and self.is_object(variant):
-            properties = cast("dict[str, dict[str, object]]", variant["properties"])
+            properties = as_maps(variant["properties"])
             label = pascal(str(properties[tag]["const"]))
             if label.isidentifier():
                 return label
@@ -450,9 +495,9 @@ class Writer:
 def kinds_of(artefact: Mapping[str, object]) -> dict[str, dict[str, object]]:
     """Return the artefact's kinds, refusing an artefact describing none."""
     kinds = artefact.get("kinds")
-    if not isinstance(kinds, dict) or not kinds:
+    if not is_map(kinds) or not kinds:
         refuse("the vendored contract describes no kinds")
-    described = cast("dict[str, object]", kinds)
+    described = kinds
     spelled: dict[str, str] = {}
     for kind, schema in sorted(described.items()):
         if not KIND.fullmatch(kind):
@@ -463,22 +508,22 @@ def kinds_of(artefact: Mapping[str, object]) -> dict[str, dict[str, object]]:
         if name in spelled:
             refuse(f"the kinds `{spelled[name]}` and `{kind}` would both be written as `{name}`")
         spelled[name] = kind
-    return cast("dict[str, dict[str, object]]", described)
+    return as_maps(described)
 
 
 def refusals_of(artefact: Mapping[str, object]) -> dict[str, dict[str, object]]:
     """Return the listed refusals, or none for an artefact older than the list."""
     listed = artefact.get("refusals", {})
-    if not isinstance(listed, dict):
+    if not is_map(listed):
         refuse(
             f"the vendored contract's refusals are {json.dumps(listed)}, and they are an object keyed by code",
         )
-    refusals = cast("dict[str, object]", listed)
+    refusals = listed
     problems = [line for code in sorted(refusals) for line in malformed_refusal(code, refusals[code])]
     named: dict[str, str] = {}
     if not problems:
         for code in sorted(refusals):
-            name = str(cast("dict[str, object]", refusals[code])["name"])
+            name = str(as_map(refusals[code])["name"])
             if name in named:
                 problems.append(f"{code}: name {name} is also the name of {named[name]}")
             named[name] = code
@@ -486,14 +531,14 @@ def refusals_of(artefact: Mapping[str, object]) -> dict[str, dict[str, object]]:
         refuse(
             "the vendored contract lists a refusal this generator cannot write:\n  " + "\n  ".join(problems),
         )
-    return cast("dict[str, dict[str, object]]", refusals)
+    return as_maps(refusals)
 
 
 def envelope(writer: Writer, kind: str, schema: Mapping[str, object]) -> list[str]:
     """Write the envelope TypedDict carrying one kind, its `kind` narrowed to that kind."""
     name = f"{pascal(kind)}Envelope"
     origin = f"the envelope of `{kind}`"
-    properties = cast("dict[str, object]", schema.get("properties", {}))
+    properties = as_map(schema.get("properties", {}))
     required = set(cast("list[str]", schema.get("required", [])))
     for needed in ENVELOPE_FIELDS:
         if needed not in properties or needed not in required:
@@ -586,7 +631,7 @@ def generate(artefact: Mapping[str, object], stamp: str) -> dict[pathlib.Path, s
     envelopes: list[str] = []
     for kind in names:
         writer.kind = kind
-        writer.definitions = cast("dict[str, object]", kinds[kind].get("$defs", {}))
+        writer.definitions = as_map(kinds[kind].get("$defs", {}))
         for name in sorted(writer.definitions):
             writer.definition(name)
         envelopes.extend(envelope(writer, kind, kinds[kind]))
@@ -662,9 +707,9 @@ def read_artefact(root: pathlib.Path) -> tuple[dict[str, object], str]:
     except (OSError, ValueError) as unreadable:
         message = f"{ARTEFACT} could not be read: {unreadable}"
         raise ArtefactRefusedError(message) from unreadable
-    if not isinstance(artefact, dict):
+    if not is_map(artefact):
         refuse(f"{ARTEFACT} is not an object")
-    return cast("dict[str, object]", artefact), stamp
+    return artefact, stamp
 
 
 def run(root: pathlib.Path) -> int:

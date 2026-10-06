@@ -416,7 +416,7 @@ wheels = [
 [[package]]
 name = "lemonfiber"
 version = "0.0.0"
-source = { editable = "." }
+source = { virtual = "." }
 dependencies = [
     { name = "aiohttp" },
     { name = "urllib3" },

@@ -32,6 +32,10 @@ concurrency:
 env:
   BRANCH: chore/the-client-takes-the-contract
   SERVER: lemonfiber/lemonfiber
+  # Every `uv` a recipe runs inside these steps syncs as the steps do: from the
+  # lockfile and nothing else, building no source distribution.
+  UV_LOCKED: "1"
+  UV_NO_BUILD: "1"
 
 jobs:
   bump:
@@ -117,13 +121,13 @@ jobs:
           HEAD_SHA: ${{ steps.behind.outputs.head }}
         run: |
           set -euo pipefail
-          uv sync --locked
+          uv sync --locked --no-build
           # The one step in this package that touches the network. Generation
           # reads the vendored copy, which is what keeps a build offline.
-          uv run just sync "${HEAD_SHA}"
-          uv run just generate
-          uv run just types
-          uv run just test
+          uv run --locked --no-build just sync "${HEAD_SHA}"
+          uv run --locked --no-build just generate
+          uv run --locked --no-build just types
+          uv run --locked --no-build just test
 
       - name: Put the change on the branch, signed
         id: commit
@@ -145,7 +149,7 @@ jobs:
           # carry. Captured rather than piped onwards, so a refusal stops the
           # step under `pipefail`.
           git status --porcelain=v1 -z --untracked-files=all > "${RUNNER_TEMP}/status"
-          changed="$(uv run python -m scripts.what_the_bump_takes < "${RUNNER_TEMP}/status")"
+          changed="$(uv run --locked --no-build python -m scripts.what_the_bump_takes < "${RUNNER_TEMP}/status")"
           printf '%s\n' "$changed"
 
           # `main` requires signed commits, and only commits GitHub itself makes
