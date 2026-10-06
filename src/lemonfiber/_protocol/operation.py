@@ -6,13 +6,11 @@ from http import HTTPMethod
 from typing import TYPE_CHECKING
 
 from lemonfiber._protocol.answers import (
-    Admitted,
-    Bundle,
-    admitted_of,
     bundle_of,
     capabilities_of,
     envelope_of,
     envelopes_of,
+    session_of,
     standing_of,
 )
 from lemonfiber._protocol.calls import (
@@ -33,6 +31,8 @@ if TYPE_CHECKING:
     from lemonfiber._generated import Envelope
     from lemonfiber._protocol.calls import Json, Query
     from lemonfiber.capabilities import CapabilitySet
+    from lemonfiber.credential import Session
+    from lemonfiber.files import BundleFile
     from lemonfiber.jobs import JobStanding
     from lemonfiber.reads import Read
 
@@ -60,7 +60,7 @@ def logs(query: Query | None) -> Operation[list[Envelope]]:
     return Operation(logs_call(query), envelopes_of)
 
 
-def bundle(name: str) -> Operation[Bundle]:
+def bundle(name: str) -> Operation[BundleFile]:
     """Fetch one support bundle, by name, as the bytes it is."""
     return Operation(bundle_call(name), lambda answer: bundle_of(name, answer))
 
@@ -80,6 +80,6 @@ def release(name: str) -> Operation[JobStanding]:
     return Operation(job_call(name, HTTPMethod.DELETE), lambda answer: standing_of(name, answer))
 
 
-def admission(password: str, name: str | None) -> Operation[Admitted]:
+def admission(password: str, name: str | None) -> Operation[Session]:
     """Offer a password, and a household member's name where it is one, for a session."""
-    return Operation(session_call(password, name), admitted_of)
+    return Operation(session_call(password, name), session_of)
