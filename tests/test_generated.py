@@ -1,0 +1,41 @@
+# Copyright (c) 2026 NightWorksIO
+"""The generated shapes say what the vendored artefact says, and nothing of their own."""
+
+import json
+import pathlib
+
+import lemonfiber
+from lemonfiber import contract
+from lemonfiber._generated import contract as generated
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+ARTEFACT = json.loads((ROOT / "contract/web-api.contract.json").read_text(encoding="utf-8"))
+
+
+def test_every_kind_the_artefact_describes_is_a_kind_here() -> None:
+    assert set(ARTEFACT["kinds"]) == set(lemonfiber.KINDS)
+
+
+def test_the_wire_version_is_the_artefacts() -> None:
+    assert ARTEFACT["api_version"] == generated.CONTRACT_API_VERSION
+
+
+def test_every_listed_refusal_says_what_the_artefact_says() -> None:
+    assert set(ARTEFACT["refusals"]) == set(lemonfiber.REFUSAL_CODES)
+    for code, listed in ARTEFACT["refusals"].items():
+        assert lemonfiber.REFUSAL_CODES[code] == lemonfiber.ListedRefusal(
+            listed["name"],
+            listed["status"],
+            listed["description"],
+        )
+
+
+def test_a_code_is_listed_only_where_the_artefact_lists_it() -> None:
+    assert lemonfiber.is_refusal_code("ADMIT-4")
+    assert not lemonfiber.is_refusal_code("ADMIT-0")
+
+
+def test_the_contract_module_hands_on_every_generated_shape() -> None:
+    for name in generated.__all__:
+        assert getattr(contract, name) is getattr(generated, name)
+    assert "StatusEnvelope" in generated.__all__
