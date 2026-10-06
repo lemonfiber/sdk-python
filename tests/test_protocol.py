@@ -9,7 +9,7 @@ import pytest
 import urllib3
 
 from lemonfiber import Address, Credential, Read, _aio, _sync
-from lemonfiber._protocol import calls, following, operation, refusals
+from lemonfiber._protocol import answers, calls, following, operation, refusals
 from lemonfiber.address import Route
 from lemonfiber.problems import StillRunningError
 
@@ -25,6 +25,7 @@ def test_each_call_is_the_request_it_names() -> None:
         "/api/front-door?a=1",
         JSON,
     )
+    assert calls.capabilities_call() == calls.Call(HTTPMethod.GET, "/api/capabilities", JSON)
     assert calls.logs_call(["x"], [], None) == calls.Call(HTTPMethod.GET, "/api/logs?service=x", JSON)
     assert calls.bundle_call("a/b c") == calls.Call(
         HTTPMethod.GET,
@@ -44,6 +45,14 @@ def test_each_call_is_the_request_it_names() -> None:
         "/api/session",
         SENT,
         b'{"password": "pw"}',
+    )
+
+
+def test_an_answer_is_handed_back_with_its_header_names_lower_cased() -> None:
+    assert calls.received(503, {"Retry-After": "1", "content-type": "x"}, b"z") == calls.Answer(
+        503,
+        {"retry-after": "1", "content-type": "x"},
+        b"z",
     )
 
 
@@ -90,9 +99,18 @@ def test_retry_after_is_read_as_a_count_of_seconds(said: str, seconds: int | Non
     assert refusals.retry_after(calls.Answer(429, {"retry-after": said}, b"")) == seconds
 
 
+def test_a_success_is_a_status_in_the_two_hundreds() -> None:
+    assert [answers.succeeded(calls.Answer(status, {}, b"")) for status in (199, 200, 299, 300)] == [
+        False,
+        True,
+        True,
+        False,
+    ]
+
+
 def only_pool(address: Address) -> urllib3.HTTPConnectionPool:
     """Return the one pool an address with one route is reached through."""
-    [(route, pool)] = _sync.ways_to(address, 3.0)
+    [(route, pool)] = _sync.ways_to(address)
     assert route == address.routes[0]
     return pool
 
@@ -100,13 +118,13 @@ def only_pool(address: Address) -> urllib3.HTTPConnectionPool:
 def test_a_plain_address_is_reached_through_a_plain_pool() -> None:
     pool = only_pool(Address("http://127.0.0.1:8080"))
     assert type(pool) is urllib3.HTTPConnectionPool
-    assert (pool.host, pool.port, pool.timeout.total) == ("127.0.0.1", 8080, 3.0)
+    assert (pool.host, pool.port) == ("127.0.0.1", 8080)
 
 
 def test_an_unpinned_https_address_is_held_to_the_trust_store() -> None:
     pool = only_pool(Address("https://127.0.0.1:8443"))
     assert isinstance(pool, urllib3.HTTPSConnectionPool)
-    assert (pool.cert_reqs, pool.assert_fingerprint, pool.timeout.total) == ("CERT_REQUIRED", None, 3.0)
+    assert (pool.cert_reqs, pool.assert_fingerprint) == ("CERT_REQUIRED", None)
     assert (pool.assert_hostname, pool.conn_kw["server_hostname"]) == (None, None)
 
 
@@ -114,7 +132,6 @@ def test_a_pinned_address_is_held_to_its_pin_alone() -> None:
     pool = only_pool(Address("https://stack.lan:8443", pin="ab" * 32))
     assert isinstance(pool, urllib3.HTTPSConnectionPool)
     assert (pool.host, pool.cert_reqs, pool.assert_fingerprint) == ("stack.lan", "CERT_NONE", "ab" * 32)
-    assert pool.timeout.total == 3.0
 
 
 def test_a_name_is_reached_at_each_address_it_resolved_to_and_asked_for_by_name() -> None:
@@ -125,7 +142,7 @@ def test_a_name_is_reached_at_each_address_it_resolved_to_and_asked_for_by_name(
     )
     assert address.routes[0].url("/api/status") == "https://[::1]:8443/base/api/status"
     assert address.routes[0].headers() == {"Host": "localhost:8443"}
-    ways = _sync.ways_to(address, 3.0)
+    ways = _sync.ways_to(address)
     for (route, pool), host in zip(ways, ["::1", "127.0.0.1"], strict=True):
         assert isinstance(pool, urllib3.HTTPSConnectionPool)
         assert (route.host, pool.host, pool.assert_hostname, pool.conn_kw["server_hostname"]) == (

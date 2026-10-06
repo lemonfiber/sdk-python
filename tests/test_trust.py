@@ -3,6 +3,7 @@
 
 import asyncio
 import ipaddress
+import socket
 import traceback
 from typing import TYPE_CHECKING, cast
 
@@ -28,6 +29,7 @@ from lemonfiber import (
     admit_async,
 )
 from lemonfiber._protocol import calls
+from lemonfiber.address import resolve
 from tests.conftest import PRINTED
 from tests.drivers import admitted, connect, opened_session
 from tests.stack import Reply, envelope
@@ -549,17 +551,29 @@ def test_the_synchronous_client_closes_as_a_context(stack: Stack) -> None:
 def test_a_name_resolved_off_the_event_loop_is_judged_by_what_the_loop_resolved(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    asked: list[tuple[str, dict[str, object]]] = []
+
     async def resolving_to_loopback(
         _loop: asyncio.AbstractEventLoop,
         host: str,
         _port: object,
-        **_options: object,
+        **options: object,
     ) -> list[tuple[object, object, object, object, tuple[str, int]]]:
-        assert host == "stack.test"
+        asked.append((host, options))
         return [(None, None, None, None, ("127.0.0.1", 0))]
 
     monkeypatch.setattr(asyncio.BaseEventLoop, "getaddrinfo", resolving_to_loopback)
     assert asyncio.run(Address.resolved("http://stack.test:8080")).host == "stack.test"
+    assert asked == [("stack.test", {"type": socket.SOCK_STREAM})]
+    for literal in ("http://127.0.0.1:8080", "http://[::1]:8080"):
+        assert asyncio.run(Address.resolved(literal)).port == 8080
+    assert len(asked) == 1
+
+
+def test_the_system_resolver_gives_each_address_once_for_connecting_over() -> None:
+    found = resolve("localhost")
+    assert found
+    assert len(found) == len(set(found))
 
 
 def test_the_door_on_a_callers_session_is_held_to_the_pin(tls_stack: Stack) -> None:

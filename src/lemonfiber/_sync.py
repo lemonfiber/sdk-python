@@ -15,7 +15,7 @@ import urllib3
 import urllib3.exceptions
 
 from lemonfiber._protocol import operation
-from lemonfiber._protocol.calls import DEFAULT_TIMEOUT, Answer, Call, with_credential
+from lemonfiber._protocol.calls import DEFAULT_TIMEOUT, Answer, Call, received, with_credential
 from lemonfiber._protocol.following import DEFAULT_EVERY, job_name, next_wait
 from lemonfiber._protocol.refusals import CERTIFICATE_REFUSED, NOT_ANSWERING, opening_refusal
 from lemonfiber._protocol.retry import Attempts
@@ -38,7 +38,7 @@ if TYPE_CHECKING:
     from lemonfiber.stream import Arrival, Live, Stale
 
 CHUNK: Final = 65536
-"""The most bytes one read of the stream asks for."""
+"""The most bytes one read of the stream asks for, so a chunk the server declares larger is not held whole."""
 
 
 VERIFYING: Final = "CERT_REQUIRED"
@@ -52,20 +52,19 @@ type Way = tuple[Route, urllib3.HTTPConnectionPool]
 """One route to a stack, and the pool its connections are kept in."""
 
 
-def pool_for(address: Address, route: Route, timeout: float) -> urllib3.HTTPConnectionPool:
+def pool_for(address: Address, route: Route) -> urllib3.HTTPConnectionPool:
     """Return the pool a route is reached through, holding the address's pin where it has one.
 
     A route that reaches a named stack by an address it resolved to checks the
-    certificate against that name, and names it in the TLS handshake.
+    certificate against that name, and names it in the TLS handshake. How long
+    a request waits is given with each request, so the pool holds no timeout.
     """
-    limit = urllib3.Timeout(total=timeout)
     if address.scheme == "http":
-        return urllib3.HTTPConnectionPool(route.host, address.port, timeout=limit)
+        return urllib3.HTTPConnectionPool(route.host, address.port)
     if address.pin is None:
         return urllib3.HTTPSConnectionPool(
             route.host,
             address.port,
-            timeout=limit,
             cert_reqs=VERIFYING,
             assert_hostname=route.named,
             server_hostname=route.named,
@@ -73,15 +72,14 @@ def pool_for(address: Address, route: Route, timeout: float) -> urllib3.HTTPConn
     return urllib3.HTTPSConnectionPool(
         route.host,
         address.port,
-        timeout=limit,
         cert_reqs=NOT_VERIFYING,
         assert_fingerprint=address.pin.hex,
     )
 
 
-def ways_to(address: Address, timeout: float) -> list[Way]:
+def ways_to(address: Address) -> list[Way]:
     """Return every route to a stack, each with its pool, in the order they are tried."""
-    return [(route, pool_for(address, route, timeout)) for route in address.routes]
+    return [(route, pool_for(address, route)) for route in address.routes]
 
 
 def attempt(way: Way, prefix: str, call: Call, limit: float) -> Answer | None:
@@ -107,8 +105,7 @@ def attempt(way: Way, prefix: str, call: Call, limit: float) -> Answer | None:
     except urllib3.exceptions.HTTPError:
         failure = UnreachableError(NOT_ANSWERING)
     else:
-        headers = {name.lower(): value for name, value in response.headers.items()}
-        return Answer(response.status, headers, response.data)
+        return received(response.status, response.headers, response.data)
     raise failure
 
 
@@ -171,7 +168,7 @@ class SyncClient:
         self._address = address
         self._credential = credential
         self._timeout = timeout
-        self._ways = ways_to(address, timeout)
+        self._ways = ways_to(address)
 
     @property
     def address(self) -> Address:
@@ -256,7 +253,7 @@ class SyncClient:
         `reconnects` attempts in a row have failed.
         """
         following = Following(self._credential, silence=silence, reconnects=reconnects, first_wait=first_wait)
-        return SyncStream(self._ways, self._address.prefix, following)
+        return SyncStream(self._ways, self._address.prefix, following, self._timeout)
 
     def close(self) -> None:
         """Close every connection this client holds."""
@@ -284,12 +281,13 @@ class SyncStream:
         ways: Sequence[Way],
         prefix: str,
         following: Following,
+        connect: float = DEFAULT_TIMEOUT,
     ) -> None:
         """Hold what opening and reading the stream needs; nothing is sent until it is iterated."""
         self._ways = ways
         self._prefix = prefix
         self._following = following
-        self._response: urllib3.BaseHTTPResponse | None = None
+        self._connect = connect
         self._arrivals = self._follow()
 
     def __iter__(self) -> Iterator[Arrival]:
@@ -308,12 +306,14 @@ class SyncStream:
         while True:
             response = self._open()
             if response is not None:
-                self._response = response
                 self._following.opened()
-                why = yield from self._read(response)
+                try:
+                    why = yield from self._read(response)
+                except BaseException:
+                    response.close()
+                    raise
                 response.drain_conn()
                 response.release_conn()
-                self._response = None
                 yield from self._following.broke(why)
             time.sleep(self._following.retry())
 
@@ -339,7 +339,7 @@ class SyncStream:
                 headers={**call.headers, **route.headers()},
                 retries=False,
                 preload_content=False,
-                timeout=urllib3.Timeout(connect=pool.timeout.connect_timeout, read=self._following.silence),
+                timeout=urllib3.Timeout(connect=self._connect, read=self._following.silence),
             )
         except urllib3.exceptions.SSLError:
             failure = CertificateRefusedError(CERTIFICATE_REFUSED)
@@ -354,8 +354,7 @@ class SyncStream:
         """Return a response that opened the stream, raising the refusal where the stack answered with one."""
         if response.status == OPENED:
             return response
-        headers = {name.lower(): value for name, value in response.headers.items()}
-        answer = Answer(response.status, headers, response.read())
+        answer = received(response.status, response.headers, response.read())
         response.release_conn()
         refusal = opening_refusal(answer)
         if refusal is not None:
@@ -377,9 +376,6 @@ class SyncStream:
     def close(self) -> None:
         """Stop following and let the connection go."""
         self._arrivals.close()
-        if self._response is not None:
-            self._response.close()
-            self._response = None
 
     def __enter__(self) -> Self:
         """Return the stream, to be closed when the block ends."""
@@ -408,7 +404,7 @@ def admit(
     credential is what a `SyncClient` is then built with.
     """
     offered = operation.admission(password, name)
-    ways = ways_to(address, timeout)
+    ways = ways_to(address)
     try:
         return offered.read(exchange(ways, address.prefix, offered.call, timeout))
     finally:

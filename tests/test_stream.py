@@ -27,6 +27,7 @@ from lemonfiber import (
     Unrecognised,
     read_envelope,
 )
+from lemonfiber._protocol.refusals import CERTIFICATE_REFUSED
 from tests.conftest import PRINTED
 from tests.drivers import connect
 from tests.stack import HEARTBEAT, Reply, Streamed, envelope, event, problem
@@ -200,6 +201,7 @@ def test_the_stream_is_held_to_the_pin(flavour: Flavour, tls_stack: Stack) -> No
     followed = follow(wrong)
     with pytest.raises(CertificateRefusedError) as refused:
         followed.take(1)
+    assert str(refused.value) == CERTIFICATE_REFUSED
     assert refused.value.__context__ is None
     wrong.close()
     assert tls_stack.arrived == []
@@ -229,6 +231,22 @@ def test_a_cut_connection_is_a_dropped_stream(client: Driver, stack: Stack) -> N
     assert gap.why is Break.DROPPED
     assert isinstance(stale, Stale)
     assert news == Live(NEWS)
+    stream.close()
+
+
+def test_a_stream_closed_across_a_gap_lets_go_of_nothing_more(client: Driver, stack: Stack) -> None:
+    stack.reply("GET", "/api/events", Streamed([(0, event("news", NEWS["data"]))]))
+    stream = follow(client)
+    live, gap = stream.take(2)
+    assert (live, type(gap)) == (Live(NEWS), Gap)
+    stream.close()
+
+
+def test_a_stream_closed_twice_is_closed(client: Driver, stack: Stack) -> None:
+    stack.reply("GET", "/api/events", Streamed([(0, event("news", NEWS["data"]))], hold=1))
+    stream = follow(client)
+    assert stream.take(1) == [Live(NEWS)]
+    stream.close()
     stream.close()
 
 
