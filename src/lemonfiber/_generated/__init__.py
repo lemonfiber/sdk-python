@@ -1,2 +1,2 @@
 # Copyright (c) 2026 NightWorksIO
-"""Generated from the lemonfiber contract at 2112d04d879bc16f9a6f9f44aa4027613a48b803. Do not edit."""
+"""Generated from the lemonfiber contract at 79bb11356f6a117d14293c49cd2d154164c5f439. Do not edit."""
