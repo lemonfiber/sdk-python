@@ -4,8 +4,8 @@
 A pinned address is reached through a connection pool holding the pin as
 `assert_fingerprint`: urllib3 compares the certificate's SHA-256 digest with it
 once the handshake completes and before a byte of the request is written, and
-refuses the connection where they differ (`ARCH-R99`). The pool is built here
-from the address alone, so no argument reaches the transport's options.
+refuses the connection where they differ. The pool is built here from the
+address alone, so no argument reaches the transport's options.
 """
 
 import time

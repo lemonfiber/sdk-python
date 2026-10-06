@@ -4,10 +4,10 @@
 A pinned address is reached with an `aiohttp.Fingerprint` on every request:
 aiohttp compares the certificate's SHA-256 digest with it once the handshake
 completes and before a byte of the request is written, and refuses the
-connection where they differ (`ARCH-R99`). It is given per request rather than
-to a connector, so it holds on a session the caller supplied, whatever that
-session's connector was built with; an unpinned https address is given a
-verifying context per request for the same reason.
+connection where they differ. It is given per request rather than to a
+connector, so it holds on a session the caller supplied, whatever that session's
+connector was built with; an unpinned https address is given a verifying
+context per request for the same reason.
 """
 
 import asyncio

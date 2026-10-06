@@ -2,10 +2,10 @@
 """The live stream, and the three things about it that are easy to get wrong.
 
 A silent stream and a dead one look alike, so the server speaks at least every
-`HEARTBEAT` seconds and twice that in silence is a broken stream (`ARCH-R50`,
-`ARCH-R61`). A broken stream is resumed from the last event id it carried
-(`ARCH-R62`). And every value held from before a gap is stale until the stream
-carries it again, whatever the resumption replays (`ARCH-R51`).
+`HEARTBEAT` seconds and twice that in silence is a broken stream. A broken
+stream is resumed from the last event id it carried. And every value held from
+before a gap is stale until the stream carries it again, whatever the
+resumption replays.
 """
 
 import time
