@@ -1,5 +1,5 @@
 # Copyright (c) 2026 NightWorksIO
-"""The lemonfiber contract's shapes, generated from the artefact at 4c472dfc80623bec04cf57df2326c7bde8f7c06e.
+"""The lemonfiber contract's shapes, generated from the artefact at 2112d04d879bc16f9a6f9f44aa4027613a48b803.
 
 Do not edit: `just generate` rewrites this file from `contract/web-api.contract.json`,
 and CI fails on any difference.
@@ -12,7 +12,16 @@ CONTRACT_API_VERSION: typing.Final = 1
 """The wire version these shapes were generated for."""
 
 
-type Action = ActionRemove | ActionRestore | ActionDelete | ActionWithdraw | ActionRepin | ActionReconfigure
+type Action = (
+    ActionRemove
+    | ActionRestore
+    | ActionDelete
+    | ActionWithdraw
+    | ActionRepin
+    | ActionReconfigure
+    | ActionRevoke
+    | ActionReinstate
+)
 """What an undo does.
 
 Tagged by what it does rather than by the field it sits in, so a reader parsing
@@ -45,6 +54,20 @@ class ActionReconfigure(typing.TypedDict):
     """The kind of resource."""
     value: typing.NotRequired[str | None]
     """What to put back, or `None` where it held nothing."""
+
+
+class ActionReinstate(typing.TypedDict):
+    """Make a revoked key good again.
+
+    Worked out so the record of a revoke has a reversal to name, and never carried
+    out: a key is revoked because something should stop holding it, and reinstating
+    it would hand back what the revoke took away. Whatever still needs a key is
+    minted a new one.
+    """
+
+    does: typing.Literal["reinstate"]
+    name: str
+    """The key's name."""
 
 
 class ActionRemove(typing.TypedDict):
@@ -92,6 +115,14 @@ class ActionRestore(typing.TypedDict):
     and a setting the operator has since chosen for themselves reads exactly
     like one nobody has touched.
     """
+
+
+class ActionRevoke(typing.TypedDict):
+    """Revoke the key a mint made."""
+
+    does: typing.Literal["revoke"]
+    name: str
+    """The key's name."""
 
 
 class ActionWithdraw(typing.TypedDict):
@@ -339,7 +370,15 @@ class Api(typing.TypedDict):
 
 
 type ApiKind = typing.Literal[
-    "servarr", "sabnzbd", "qbittorrent", "seerr", "bindery", "jellyfin", "bazarr", "audiobookshelf"
+    "servarr",
+    "sabnzbd",
+    "qbittorrent",
+    "seerr",
+    "bindery",
+    "jellyfin",
+    "bazarr",
+    "audiobookshelf",
+    "nzbhydra2",
 ]
 """The API shapes lemonfiber knows how to speak.
 
@@ -549,6 +588,19 @@ class Cap(typing.TypedDict):
     """What happens when it is reached, chosen when the cap was declared."""
     monthly: int
     """The allowance, in bytes."""
+
+
+class Capabilities(typing.TypedDict):
+    """Every capability this stack has, by the path its request is served at."""
+
+    capabilities: dict[str, CapabilityState]
+    """What each comes to for the credential that asked. A request this stack does
+    not have is absent rather than listed as anything.
+    """
+
+
+type CapabilityState = typing.Literal["available", "unconfigured", "unpermitted"]
+"""What one capability comes to for the credential that asked."""
 
 
 class Capacity(typing.TypedDict):
@@ -2252,10 +2304,35 @@ class Kept(typing.TypedDict):
     """Why it is kept."""
 
 
+class KeyListing(typing.TypedDict):
+    """Every key this machine has minted, and what became of a revoke."""
+
+    keys: list[ListedKey]
+    """In the order they were minted."""
+    purposes: str
+    """What a purpose in the listing is worth, said with it."""
+    rehearsed: bool
+    """Whether this was a rehearsal: what revoking would come to, with nothing revoked."""
+    revoked: typing.NotRequired[str | None]
+    """The key this run revoked, where it revoked one."""
+
+
+type KeyPurpose = typing.Literal["home-assistant", "mcp", "other"]
+"""What the minter said a key is for.
+
+A label and nothing more. The core cannot tell what a program does with a key, so the
+listing shows this as the minter's own declaration rather than as anything verified.
+"""
+
+
 type KeySource = typing.Literal[
     "config-xml", "config-ini", "config-json", "config-yaml", "api-settings", "generated", "none"
 ]
 """Where a service's credential comes from."""
+
+
+type KeyState = typing.Literal["active", "revoked", "orphaned", "unconfirmed"]
+"""Where a key stands."""
 
 
 class Leaving(typing.TypedDict):
@@ -2439,6 +2516,27 @@ class LinkingReport(typing.TypedDict):
     """
     remedy: str
     """What would fix it, offered."""
+
+
+class ListedKey(typing.TypedDict):
+    """One key as the listing shows it, without its secret."""
+
+    member_minted: bool
+    """Whether a household member minted it for themselves."""
+    minted: str
+    """When it was minted."""
+    name: str
+    """The name it was minted under."""
+    purpose: KeyPurpose
+    """What the minter said it is for. A declaration, not something the core verified."""
+    revoked: typing.NotRequired[str | None]
+    """When it was revoked, where it has been."""
+    scope: str
+    """What it admits: `read`, `act` or `member:<name>`."""
+    state: KeyState
+    """Where it stands."""
+    used: typing.NotRequired[str | None]
+    """When it was last admitted, where it has been."""
 
 
 class Listing(typing.TypedDict):
@@ -2706,6 +2804,35 @@ class MigrationReport(typing.TypedDict):
     """Existing projects, by project name."""
     unsupported: list[UnsupportedReport]
     """What was found and cannot be adopted."""
+
+
+class MintedKey(typing.TypedDict):
+    """A key minted, with everything a client on another machine needs to use it.
+
+    The only document that ever carries the secret. Every surface that renders it does so
+    once, and nothing here writes it down.
+    """
+
+    address: typing.NotRequired[str | None]
+    """Where a client on another machine reaches the stack: the `https` address it was
+    last served at on the network. Absent where it has never been served that way.
+    """
+    caution: typing.NotRequired[str | None]
+    """What is worth knowing before handing the key over, where anything is: how to
+    serve the stack so another machine can reach it.
+    """
+    name: str
+    """The name it was minted under."""
+    pin: typing.NotRequired[str | None]
+    """The certificate that address presents: SHA-256 over its DER encoding, in
+    lower-case hex. A client off this machine pins it.
+    """
+    purpose: KeyPurpose
+    """What the minter said it is for."""
+    scope: str
+    """What it admits: `read`, `act` or `member:<name>`."""
+    secret: Secret
+    """The secret, sent in `X-Lemonfiber-Token`. It is not shown again."""
 
 
 class ModeReport(typing.TypedDict):
@@ -3295,6 +3422,42 @@ class Passed(typing.TypedDict):
     """
 
 
+class PausedClient(typing.TypedDict):
+    """What one download client said about being paused or resumed."""
+
+    client: str
+    """The client, by the name the stack knows it under."""
+    now: typing.NotRequired[Pulling | None]
+    """What it read back after it was asked. Absent on a rehearsal, which asks nothing,
+    and where the client could not be reached.
+    """
+    unreached: typing.NotRequired[str | None]
+    """Why it could not be reached, in its own words where it gave any."""
+    was: typing.NotRequired[Pulling | None]
+    """Whether it was fetching before it was asked, where it said."""
+
+
+type Pausing = typing.Literal["pause", "resume"]
+"""Which of the two was asked for."""
+
+
+class PausingReport(typing.TypedDict):
+    """What pausing or resuming every download client came to."""
+
+    asked: Pausing
+    """Which of the two was asked for."""
+    caution: typing.NotRequired[str | None]
+    """What a resume runs into where a spent cap had stopped the clients: they are let
+    go as asked, and the cap stops them again the next time the line is checked.
+    """
+    clients: list[PausedClient]
+    """Every download client the stack runs, in the order the stack declares them."""
+    rehearsed: bool
+    """Whether this was a rehearsal: what each client is doing now, with nothing asked
+    of any of them.
+    """
+
+
 type Period = typing.Literal["active", "quiet"]
 """Which side of the household's day a moment falls on."""
 
@@ -3365,6 +3528,15 @@ class Plan(typing.TypedDict):
     of a pass over this list: the union is over profiles, and a service
     appearing twice is not a state this can hold.
     """
+
+
+type PluginAdapterOwner = typing.Literal["lemonfiber"]
+"""Whose an adapter is.
+
+One answer, and the field exists so that the answer is on the wire: an adapter a
+plugin could bring would be code a stranger wrote running with lemonfiber's
+authority, which nothing here can load.
+"""
 
 
 class PluginChange(typing.TypedDict):
@@ -3604,6 +3776,13 @@ class PluginInstalls(typing.TypedDict):
     a rehearsal that showed only the new entry would not say what it is joining.
     """
 
+    agreement: typing.NotRequired[str | None]
+    """What this run's reading names itself, so an answer to it can say which reading
+    it answered; nothing on the reading of what is installed, which offers nothing.
+
+    Named part by part, so an answer refused because something moved is told which
+    part did.
+    """
     install: typing.NotRequired[PluginInstall | None]
     """What this run's install came to, or nothing where it only read.
 
@@ -3664,6 +3843,19 @@ class PluginOverriding(typing.TypedDict):
     """Which bundled setting it changes."""
     why: str
     """What changing it is for."""
+
+
+class PluginPair(typing.TypedDict):
+    """One value a recipe could carry to one destination, as the operator agrees to it."""
+
+    approval: str
+    """What approving this pair is written as, on the command line and over the web."""
+    origin: str
+    """Whose value it is, as the step that captures it says; empty where no step does."""
+    to: str
+    """Where it may be carried, by the name the manifest gives it."""
+    value: str
+    """What the value is called within the recipe."""
 
 
 class PluginPlaced(typing.TypedDict):
@@ -3811,6 +4003,21 @@ class PluginReachedLoopback(typing.TypedDict):
     tier: typing.Literal["loopback"]
 
 
+class PluginRecipe(typing.TypedDict):
+    """One recipe, as an operator agrees to what it does."""
+
+    id: str
+    """The recipe's id within the plugin."""
+    pairs: list[PluginPair]
+    """Every value it could carry, and where to."""
+    steps: list[PluginStep]
+    """Every call, in the order the recipe makes them."""
+    title: str
+    """What it accomplishes, in one line."""
+    why: str
+    """Why it is worth running."""
+
+
 class PluginRemoval(typing.TypedDict):
     """What taking a plugin off the machine came to, or would come to."""
 
@@ -3904,6 +4111,17 @@ class PluginSecret(typing.TypedDict):
     """What holding it is for."""
 
 
+class PluginServiceAdapter(typing.TypedDict):
+    """One adapter of lemonfiber's that one of the plugin's own services names."""
+
+    kind: ApiKind
+    """Which of lemonfiber's adapters it is."""
+    owner: PluginAdapterOwner
+    """Whose it is, which is lemonfiber's."""
+    service: str
+    """The service that names it."""
+
+
 type PluginSourceStanding = (
     PluginSourceStandingReachable | PluginSourceStandingUnreachable | PluginSourceStandingUnasked
 )
@@ -3935,6 +4153,34 @@ class PluginSourceStandingUnreachable(typing.TypedDict):
     standing: typing.Literal["unreachable"]
     why: str
     """What asking it said."""
+
+
+class PluginStep(typing.TypedDict):
+    """One call a recipe makes, in the order it makes them."""
+
+    adapter: typing.NotRequired[PluginStepAdapter | None]
+    """The adapter the destination is reached through, or nothing where it is a name
+    outside the stack, which no adapter of lemonfiber's speaks to.
+    """
+    id: str
+    """The step's id within its recipe."""
+    method: str
+    """The HTTP method it calls with."""
+    path: str
+    """The path it calls."""
+    to: str
+    """Where it calls: a service of this stack's or the plugin's own, or a name outside
+    both, as the manifest wrote it. Never a resolved address.
+    """
+
+
+class PluginStepAdapter(typing.TypedDict):
+    """The adapter a call reaches its destination through."""
+
+    kind: ApiKind
+    """Which of lemonfiber's adapters it is."""
+    owner: PluginAdapterOwner
+    """Whose it is, which is lemonfiber's."""
 
 
 class PluginSubstituted(typing.TypedDict):
@@ -4953,6 +5199,14 @@ class SeasonCoverage(typing.TypedDict):
     nobody asked for are counted separately rather than inflating this, so a season
     with every wanted episode present reads as complete even where specials are not.
     """
+
+
+type Secret = str
+"""A key's secret, as it is handed over once.
+
+It has no `Debug` that prints it and no way back from its digest, and nothing here
+writes it anywhere: the one reply that carries it is the only place it appears.
+"""
 
 
 class SeedReport(typing.TypedDict):
@@ -7571,12 +7825,16 @@ default when they are returning to a choice.
 PluginInstalled = typing.TypedDict(
     "PluginInstalled",
     {
+        "adapters": typing.NotRequired[list[PluginServiceAdapter]],
         "contributions": typing.NotRequired[list[Contribution]],
         "declared": typing.NotRequired[PluginDeclaration],
+        "description": typing.NotRequired[str | None],
         "from": typing.NotRequired[str],
         "installed_at": typing.NotRequired[str],
+        "name": typing.NotRequired[str | None],
         "plugin": str,
         "provides": typing.NotRequired[list[str]],
+        "recipes": typing.NotRequired[list[PluginRecipe]],
         "revision": typing.NotRequired[str],
         "services": list[PluginPlaced],
         "signed": typing.NotRequired[str],
@@ -7656,6 +7914,15 @@ class BundleEnvelope(typing.TypedDict):
     data: Bundle
     host: typing.NotRequired[str | None]
     kind: typing.Literal["bundle"]
+
+
+class CapabilitiesEnvelope(typing.TypedDict):
+    """The envelope carrying `capabilities`."""
+
+    api_version: int
+    data: Capabilities
+    host: typing.NotRequired[str | None]
+    kind: typing.Literal["capabilities"]
 
 
 class CatalogueEnvelope(typing.TypedDict):
@@ -7829,6 +8096,15 @@ class JobEnvelope(typing.TypedDict):
     kind: typing.Literal["job"]
 
 
+class KeysEnvelope(typing.TypedDict):
+    """The envelope carrying `keys`."""
+
+    api_version: int
+    data: KeyListing
+    host: typing.NotRequired[str | None]
+    kind: typing.Literal["keys"]
+
+
 class LifecycleEnvelope(typing.TypedDict):
     """The envelope carrying `lifecycle`."""
 
@@ -7854,6 +8130,15 @@ class MigrationEnvelope(typing.TypedDict):
     data: MigrationReport
     host: typing.NotRequired[str | None]
     kind: typing.Literal["migration"]
+
+
+class MintedKeyEnvelope(typing.TypedDict):
+    """The envelope carrying `minted-key`."""
+
+    api_version: int
+    data: MintedKey
+    host: typing.NotRequired[str | None]
+    kind: typing.Literal["minted-key"]
 
 
 class MusicEnvelope(typing.TypedDict):
@@ -7899,6 +8184,15 @@ class PairingEnvelope(typing.TypedDict):
     data: Pairing
     host: typing.NotRequired[str | None]
     kind: typing.Literal["pairing"]
+
+
+class PausingEnvelope(typing.TypedDict):
+    """The envelope carrying `pausing`."""
+
+    api_version: int
+    data: PausingReport
+    host: typing.NotRequired[str | None]
+    kind: typing.Literal["pausing"]
 
 
 class PluginsEnvelope(typing.TypedDict):
@@ -8198,6 +8492,7 @@ type Kind = typing.Literal[
     "bandwidth",
     "beside",
     "bundle",
+    "capabilities",
     "catalogue",
     "certificate",
     "clients",
@@ -8217,14 +8512,17 @@ type Kind = typing.Literal[
     "import",
     "invitation",
     "job",
+    "keys",
     "lifecycle",
     "log",
     "migration",
+    "minted-key",
     "music",
     "news",
     "news-items",
     "outbound",
     "pairing",
+    "pausing",
     "plugins",
     "preview",
     "provenance",
@@ -8270,6 +8568,7 @@ KINDS: typing.Final[frozenset[Kind]] = frozenset(
         "bandwidth",
         "beside",
         "bundle",
+        "capabilities",
         "catalogue",
         "certificate",
         "clients",
@@ -8289,14 +8588,17 @@ KINDS: typing.Final[frozenset[Kind]] = frozenset(
         "import",
         "invitation",
         "job",
+        "keys",
         "lifecycle",
         "log",
         "migration",
+        "minted-key",
         "music",
         "news",
         "news-items",
         "outbound",
         "pairing",
+        "pausing",
         "plugins",
         "preview",
         "provenance",
@@ -8342,6 +8644,7 @@ type Envelope = (
     | BandwidthEnvelope
     | BesideEnvelope
     | BundleEnvelope
+    | CapabilitiesEnvelope
     | CatalogueEnvelope
     | CertificateEnvelope
     | ClientsEnvelope
@@ -8361,14 +8664,17 @@ type Envelope = (
     | ImportEnvelope
     | InvitationEnvelope
     | JobEnvelope
+    | KeysEnvelope
     | LifecycleEnvelope
     | LogEnvelope
     | MigrationEnvelope
+    | MintedKeyEnvelope
     | MusicEnvelope
     | NewsEnvelope
     | NewsItemsEnvelope
     | OutboundEnvelope
     | PairingEnvelope
+    | PausingEnvelope
     | PluginsEnvelope
     | PreviewEnvelope
     | ProvenanceEnvelope
@@ -8425,6 +8731,10 @@ class KindNarrowing(typing.Protocol):
     @typing.overload
     def __call__(self, envelope: Envelope, kind: typing.Literal["bundle"], /) -> BundleEnvelope: ...
     @typing.overload
+    def __call__(
+        self, envelope: Envelope, kind: typing.Literal["capabilities"], /
+    ) -> CapabilitiesEnvelope: ...
+    @typing.overload
     def __call__(self, envelope: Envelope, kind: typing.Literal["catalogue"], /) -> CatalogueEnvelope: ...
     @typing.overload
     def __call__(self, envelope: Envelope, kind: typing.Literal["certificate"], /) -> CertificateEnvelope: ...
@@ -8463,11 +8773,15 @@ class KindNarrowing(typing.Protocol):
     @typing.overload
     def __call__(self, envelope: Envelope, kind: typing.Literal["job"], /) -> JobEnvelope: ...
     @typing.overload
+    def __call__(self, envelope: Envelope, kind: typing.Literal["keys"], /) -> KeysEnvelope: ...
+    @typing.overload
     def __call__(self, envelope: Envelope, kind: typing.Literal["lifecycle"], /) -> LifecycleEnvelope: ...
     @typing.overload
     def __call__(self, envelope: Envelope, kind: typing.Literal["log"], /) -> LogEnvelope: ...
     @typing.overload
     def __call__(self, envelope: Envelope, kind: typing.Literal["migration"], /) -> MigrationEnvelope: ...
+    @typing.overload
+    def __call__(self, envelope: Envelope, kind: typing.Literal["minted-key"], /) -> MintedKeyEnvelope: ...
     @typing.overload
     def __call__(self, envelope: Envelope, kind: typing.Literal["music"], /) -> MusicEnvelope: ...
     @typing.overload
@@ -8478,6 +8792,8 @@ class KindNarrowing(typing.Protocol):
     def __call__(self, envelope: Envelope, kind: typing.Literal["outbound"], /) -> OutboundEnvelope: ...
     @typing.overload
     def __call__(self, envelope: Envelope, kind: typing.Literal["pairing"], /) -> PairingEnvelope: ...
+    @typing.overload
+    def __call__(self, envelope: Envelope, kind: typing.Literal["pausing"], /) -> PausingEnvelope: ...
     @typing.overload
     def __call__(self, envelope: Envelope, kind: typing.Literal["plugins"], /) -> PluginsEnvelope: ...
     @typing.overload
@@ -8550,6 +8866,8 @@ class KindNarrowing(typing.Protocol):
 
 type RefusalCode = typing.Literal[
     "ADMIT-10",
+    "ADMIT-11",
+    "ADMIT-12",
     "ADMIT-4",
     "ADMIT-5",
     "ADMIT-6",
@@ -8558,6 +8876,7 @@ type RefusalCode = typing.Literal[
     "ADMIT-9",
     "ASK-1",
     "ASK-10",
+    "ASK-11",
     "ASK-2",
     "ASK-3",
     "ASK-4",
@@ -8568,7 +8887,37 @@ type RefusalCode = typing.Literal[
     "ASK-9",
     "GONE-2",
     "MIGRATE-1",
+    "PLUGIN-10",
+    "PLUGIN-11",
+    "PLUGIN-12",
+    "PLUGIN-13",
+    "PLUGIN-14",
+    "PLUGIN-15",
+    "PLUGIN-16",
+    "PLUGIN-17",
+    "PLUGIN-18",
+    "PLUGIN-19",
+    "PLUGIN-2",
+    "PLUGIN-20",
+    "PLUGIN-21",
+    "PLUGIN-22",
+    "PLUGIN-23",
+    "PLUGIN-24",
+    "PLUGIN-25",
+    "PLUGIN-26",
+    "PLUGIN-27",
+    "PLUGIN-28",
+    "PLUGIN-29",
+    "PLUGIN-3",
+    "PLUGIN-30",
+    "PLUGIN-31",
+    "PLUGIN-32",
     "PLUGIN-4",
+    "PLUGIN-5",
+    "PLUGIN-6",
+    "PLUGIN-7",
+    "PLUGIN-8",
+    "PLUGIN-9",
     "READ-1",
     "READ-10",
     "READ-11",
@@ -8576,6 +8925,7 @@ type RefusalCode = typing.Literal[
     "READ-13",
     "READ-14",
     "READ-15",
+    "READ-16",
     "READ-2",
     "READ-3",
     "READ-4",
@@ -8624,8 +8974,16 @@ REFUSAL_CODES: typing.Final[typing.Mapping[RefusalCode, ListedRefusal]] = types.
         "ADMIT-10": ListedRefusal(
             "NOT_A_PASSWORD", 400, "Raised when what was offered at the door is not a password."
         ),
+        "ADMIT-11": ListedRefusal(
+            "KEY_IN_THE_CLEAR",
+            403,
+            "Raised when a key arrived from another machine over a connection its pin does not verify.",
+        ),
+        "ADMIT-12": ListedRefusal(
+            "NOT_FOR_A_KEY", 403, "Raised when a key asked for something its scope does not reach."
+        ),
         "ADMIT-4": ListedRefusal(
-            "NOT_ADMITTED", 403, "Raised when a request carried no token or session this run admits."
+            "NOT_ADMITTED", 403, "Raised when a request carried no token, session or key this run admits."
         ),
         "ADMIT-5": ListedRefusal(
             "ELSEWHERE", 403, "Raised when a request said it came from somewhere this server is not."
@@ -8647,6 +9005,11 @@ REFUSAL_CODES: typing.Final[typing.Mapping[RefusalCode, ListedRefusal]] = types.
         ),
         "ASK-10": ListedRefusal(
             "WRONG_METHOD", 405, "Raised where an endpoint was asked with a method it does not answer."
+        ),
+        "ASK-11": ListedRefusal(
+            "NOT_A_KEY_REQUEST",
+            400,
+            "Raised where the body of a mint is not a key's name, scope, purpose and the password.",
         ),
         "ASK-2": ListedRefusal(
             "MISSING_ARGUMENT", 400, "Raised where an action was not given an argument it needs."
@@ -8686,7 +9049,129 @@ REFUSAL_CODES: typing.Final[typing.Mapping[RefusalCode, ListedRefusal]] = types.
             400,
             "Raised when a replacement was agreed to for an offer that is not the one standing now.",
         ),
+        "PLUGIN-10": ListedRefusal(
+            "NOTHING_TO_REMOVE", 404, "Nothing by that name is installed on this machine."
+        ),
+        "PLUGIN-11": ListedRefusal(
+            "NOTHING_TO_UPDATE", 404, "Nothing by that id is installed, so there is no version to replace."
+        ),
+        "PLUGIN-12": ListedRefusal(
+            "STUCK", 500, "The version installed would not come off, so nothing else was touched."
+        ),
+        "PLUGIN-13": ListedRefusal(
+            "ANSWERED",
+            400,
+            "Raised when a plugin's service would answer on a label another plugin's already does.",
+        ),
+        "PLUGIN-14": ListedRefusal(
+            "TWO_SOURCES",
+            400,
+            "Raised when a plugin is installed from a source other than the one its name is already installed from.",
+        ),
+        "PLUGIN-15": ListedRefusal(
+            "SOURCE_OFF",
+            400,
+            "Raised when a plugin is named from a git source and fetching from one is switched off.",
+        ),
+        "PLUGIN-16": ListedRefusal(
+            "UNFETCHED",
+            500,
+            "Raised when a git source could not be reached or would not hand over a revision.",
+        ),
+        "PLUGIN-17": ListedRefusal(
+            "NO_REVISION", 404, "Raised when a git source holds no branch, tag or commit by the name given."
+        ),
+        "PLUGIN-18": ListedRefusal(
+            "CATALOGUE_OFF",
+            400,
+            "Raised when a plugin is installed by name and asking the catalogue is switched off.",
+        ),
+        "PLUGIN-19": ListedRefusal(
+            "CATALOGUE_UNREACHABLE",
+            500,
+            "Raised when the catalogue's index or its signature could not be fetched.",
+        ),
+        "PLUGIN-2": ListedRefusal("UNREADABLE", 404, "The source names no plugin this build can read."),
+        "PLUGIN-20": ListedRefusal(
+            "SIGNATURE_UNVERIFIED",
+            500,
+            "Raised when the catalogue's index has no signature, one that does not verify, or none this build carries a key to check.",
+        ),
+        "PLUGIN-21": ListedRefusal(
+            "CATALOGUE_UNREADABLE",
+            500,
+            "Raised when the catalogue's index verified and is not one this build reads.",
+        ),
+        "PLUGIN-22": ListedRefusal(
+            "NOT_CATALOGUED", 404, "Raised when the catalogue holds no plugin by the name given."
+        ),
+        "PLUGIN-23": ListedRefusal(
+            "NOT_AS_REVIEWED",
+            500,
+            "Raised when what the catalogue's origin served is not what the catalogue reviewed.",
+        ),
+        "PLUGIN-24": ListedRefusal(
+            "SPELLED_ALIKE",
+            400,
+            "Raised when a plugin's service would be named, where lemonfiber keeps what a service holds, as another installed plugin's service already is.",
+        ),
+        "PLUGIN-25": ListedRefusal(
+            "PLUGIN_OFFER_MOVED",
+            400,
+            "Raised when an install, an update or a removal answers an offer that was read against a plugin, a stack or a record that has since moved.",
+        ),
+        "PLUGIN-26": ListedRefusal(
+            "UNAPPROVED",
+            400,
+            "Raised when a value a recipe would carry to a destination was not approved as itself, or an approval names a pair the recipe does not carry.",
+        ),
+        "PLUGIN-27": ListedRefusal(
+            "ANOTHER_PLUGIN",
+            400,
+            "Raised when the source an update names holds a different plugin from the one it was asked to update.",
+        ),
+        "PLUGIN-28": ListedRefusal(
+            "OCCUPIED",
+            400,
+            "Raised when a plugin's service would take a name, a port or a label something already on this machine holds: a service of the stack or of the operator's overlay, another plugin's port, or a site in the proxy's live configuration.",
+        ),
+        "PLUGIN-29": ListedRefusal(
+            "CATALOGUE_REPLACED",
+            500,
+            "Raised when the catalogue's index verifies and is older than the newest one this machine has verified.",
+        ),
+        "PLUGIN-3": ListedRefusal(
+            "REFUSED", 400, "The manifest is read and this build refuses what it declares."
+        ),
+        "PLUGIN-30": ListedRefusal(
+            "NEWEST_UNKEPT",
+            500,
+            "Raised when the record of the newest catalogue index this machine verified cannot be read or written.",
+        ),
+        "PLUGIN-31": ListedRefusal(
+            "SCHEME_REFUSED",
+            400,
+            "Raised when a git source is named over a transport other than https, before anything is asked of it.",
+        ),
+        "PLUGIN-32": ListedRefusal(
+            "ADDRESS_REFUSED",
+            400,
+            "Raised when a git source's host is, or stands for, an address on this machine or on a network of its own: loopback, private, link-local or unspecified.",
+        ),
         "PLUGIN-4": ListedRefusal("UNRECORDED", 500, "The record of what is installed cannot be read."),
+        "PLUGIN-5": ListedRefusal("ALREADY", 400, "The plugin is installed already."),
+        "PLUGIN-6": ListedRefusal(
+            "NOWHERE", 500, "There is no stack on this machine to put a plugin's container in."
+        ),
+        "PLUGIN-7": ListedRefusal(
+            "UNWRITABLE", 500, "A directory or a document the install decided on would not land."
+        ),
+        "PLUGIN-8": ListedRefusal(
+            "UNRECORDABLE", 500, "The wiring went down and the record of what is installed did not."
+        ),
+        "PLUGIN-9": ListedRefusal(
+            "UNPROVED", 500, "The plugin's own service would not start, so nothing about it could be proved."
+        ),
         "READ-1": ListedRefusal(
             "UNWANTED", 400, "Raised where a read was given a parameter its answer has nowhere to put."
         ),
@@ -8710,7 +9195,14 @@ REFUSAL_CODES: typing.Final[typing.Mapping[RefusalCode, ListedRefusal]] = types.
             "Raised where how many log lines to begin with is not a number within the ceiling.",
         ),
         "READ-15": ListedRefusal(
-            "NOT_A_CHOICE", 400, "Raised where whether to keep reading is neither true nor false."
+            "NOT_A_CHOICE",
+            400,
+            "Raised where a parameter that takes a yes or a no is neither true nor false.",
+        ),
+        "READ-16": ListedRefusal(
+            "MEMBER_AND_DEFAULTS",
+            400,
+            "Raised where a household read named a member and asked for the household's defaults as well.",
         ),
         "READ-2": ListedRefusal(
             "REPEATED", 400, "Raised where a parameter carrying one value was given more than once."
@@ -8810,9 +9302,11 @@ __all__ = [
     "Action",
     "ActionDelete",
     "ActionReconfigure",
+    "ActionReinstate",
     "ActionRemove",
     "ActionRepin",
     "ActionRestore",
+    "ActionRevoke",
     "ActionWithdraw",
     "Active",
     "Address",
@@ -8848,6 +9342,9 @@ __all__ = [
     "CONTRACT_API_VERSION",
     "Candidate",
     "Cap",
+    "Capabilities",
+    "CapabilitiesEnvelope",
+    "CapabilityState",
     "Capacity",
     "CarryingReport",
     "CatalogueEnvelope",
@@ -8976,7 +9473,11 @@ __all__ = [
     "Jump",
     "KINDS",
     "Kept",
+    "KeyListing",
+    "KeyPurpose",
     "KeySource",
+    "KeyState",
+    "KeysEnvelope",
     "Kind",
     "KindNarrowing",
     "Leaving",
@@ -8993,6 +9494,7 @@ __all__ = [
     "Link",
     "Linked",
     "LinkingReport",
+    "ListedKey",
     "ListedRefusal",
     "Listing",
     "LogEnvelope",
@@ -9009,6 +9511,8 @@ __all__ = [
     "Metered",
     "MigrationEnvelope",
     "MigrationReport",
+    "MintedKey",
+    "MintedKeyEnvelope",
     "ModeReport",
     "Moment",
     "MovedReport",
@@ -9069,10 +9573,15 @@ __all__ = [
     "PanelVpnUnavailableData",
     "Part",
     "Passed",
+    "PausedClient",
+    "Pausing",
+    "PausingEnvelope",
+    "PausingReport",
     "Period",
     "Phase",
     "Piece",
     "Plan",
+    "PluginAdapterOwner",
     "PluginChange",
     "PluginChangedCheck",
     "PluginConstraint",
@@ -9085,21 +9594,26 @@ __all__ = [
     "PluginInstalled",
     "PluginInstalls",
     "PluginOverriding",
+    "PluginPair",
     "PluginPlaced",
     "PluginProving",
     "PluginPuts",
     "PluginReached",
     "PluginReachedHousehold",
     "PluginReachedLoopback",
+    "PluginRecipe",
     "PluginRemoval",
     "PluginRequest",
     "PluginRestored",
     "PluginSecret",
+    "PluginServiceAdapter",
     "PluginSource",
     "PluginSourceStanding",
     "PluginSourceStandingReachable",
     "PluginSourceStandingUnasked",
     "PluginSourceStandingUnreachable",
+    "PluginStep",
+    "PluginStepAdapter",
     "PluginSubstituted",
     "PluginUnfilled",
     "PluginUpdate",
@@ -9189,6 +9703,7 @@ __all__ = [
     "ScopeService",
     "ScopeWholeStack",
     "SeasonCoverage",
+    "Secret",
     "SeedEnvelope",
     "SeedReport",
     "SeedSeverity",
