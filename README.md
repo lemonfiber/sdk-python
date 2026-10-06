@@ -40,6 +40,22 @@ async with AsyncClient(address, Credential(integration_key), session=session) as
 - **Answers.** `read` takes a `Read`, the reads the contract names; `logs` and `bundle` are the two reads that are not one envelope. `act` sends an action once and never retries it. `job`, `release` and `follow` redeem the name a long-running action answered with.
 - **Problems.** Every failure is a `LemonfiberError`. A refusal is read from its code where the contract lists it and from its status where it carries none: `NotAdmittedError`, `DeclinedError`, `MissingError`, `MisaskedError`, `BusyError`, `TooManyAttemptsError` and `FailedError`, each carrying the status, the code and the problem document. An answer in a version this package does not speak is `ApiVersionMismatchError`, naming both versions.
 
+## Following the live stream
+
+```python
+async with client.events() as stream:
+    async for arrival in stream:
+        match arrival:
+            case Live(envelope):  # carried just now
+                ...
+            case Stale(envelope, quiet_for):  # held from before a gap: not what is true now
+                ...
+            case Gap(why, quiet_for):  # the stream broke and is being reopened
+                ...
+```
+
+`SyncClient.events()` is the same stream for a plain `for` loop. The server speaks at least every 15 seconds; 30 seconds in silence is a broken stream rather than a quiet one. A broken stream is reopened from the last event id it carried, sent as `Last-Event-ID`, waiting a second and twice as long after each failure, and `StreamLostError` is raised once five attempts in a row have failed. Every value held from before a gap arrives again as `Stale` and stays stale until the stream carries it again; `stream.held()` says where each kind stands. A refused credential, a refused certificate or an answer in another version is raised at once rather than retried. A kind this package was not generated with arrives as `Unrecognised`, naming the kind and nothing more. An event, or a line of one, longer than 16,777,216 characters is refused as `UnreadableResponseError` rather than held.
+
 Every shape the contract describes is importable from `lemonfiber.contract`.
 
 ## What is generated and what is written
@@ -51,7 +67,7 @@ uv run just sync <tag-or-commit>   # vendor the artefact one revision of lemonfi
 uv run just generate               # rewrite src/lemonfiber/_generated/ from it
 ```
 
-Everything else is written once, in Python: the envelope's version refusal, the token's placement, the pin, and the error model.
+Everything else is written once, in Python: the envelope's version refusal, the token's placement, the pin, the stream's behaviour, and the error model.
 
 ## Working on it
 

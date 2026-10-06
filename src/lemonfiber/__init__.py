@@ -9,7 +9,7 @@ its kind (`lemonfiber.contract` holds each shape), and every failure is a
 `LemonfiberError`.
 """
 
-from lemonfiber._aio import AsyncClient, admit_async
+from lemonfiber._aio import AsyncClient, AsyncStream, admit_async
 from lemonfiber._generated.contract import (
     KINDS,
     REFUSAL_CODES,
@@ -19,7 +19,7 @@ from lemonfiber._generated.contract import (
     RefusalCode,
     is_refusal_code,
 )
-from lemonfiber._sync import SyncClient, admit
+from lemonfiber._sync import SyncClient, SyncStream, admit
 from lemonfiber._wire import Admitted, Bundle, Json, Query
 from lemonfiber.address import Address, CertificatePin, Route
 from lemonfiber.credential import CREDENTIAL_HEADER, Credential
@@ -42,6 +42,7 @@ from lemonfiber.problems import (
     PasswordRefusedError,
     RefusedError,
     StillRunningError,
+    StreamLostError,
     TooManyAttemptsError,
     UnexpectedKindError,
     UnknownKindError,
@@ -49,17 +50,23 @@ from lemonfiber.problems import (
     UnreadableResponseError,
 )
 from lemonfiber.reads import Read
+from lemonfiber.stream import HEARTBEAT, SILENCE_ALLOWED, Arrival, Break, Gap, Live, Stale, Unrecognised
 
 __all__ = [
     "CREDENTIAL_HEADER",
+    "HEARTBEAT",
     "KINDS",
     "REFUSAL_CODES",
+    "SILENCE_ALLOWED",
     "SPOKEN_API_VERSION",
     "Address",
     "AddressRefusedError",
     "Admitted",
     "ApiVersionMismatchError",
+    "Arrival",
     "AsyncClient",
+    "AsyncStream",
+    "Break",
     "Bundle",
     "BusyError",
     "CertificatePin",
@@ -72,11 +79,13 @@ __all__ = [
     "Envelope",
     "FailedError",
     "Finished",
+    "Gap",
     "JobStanding",
     "Json",
     "Kind",
     "LemonfiberError",
     "ListedRefusal",
+    "Live",
     "MisaskedError",
     "MissingError",
     "NoSuchJobError",
@@ -88,13 +97,17 @@ __all__ = [
     "RefusedError",
     "Route",
     "Running",
+    "Stale",
     "StillRunningError",
+    "StreamLostError",
     "SyncClient",
+    "SyncStream",
     "TooManyAttemptsError",
     "UnexpectedKindError",
     "UnknownKindError",
     "UnreachableError",
     "UnreadableResponseError",
+    "Unrecognised",
     "admit",
     "admit_async",
     "expect",

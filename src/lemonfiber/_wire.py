@@ -197,6 +197,17 @@ def session_call(password: str, name: str | None) -> Call:
     return Call("POST", SESSION, {"Accept": JSON_TYPE, "Content-Type": JSON_TYPE}, json.dumps(offer).encode())
 
 
+REFUSED_OUTRIGHT: Final = frozenset({400, 401, 403, 404})
+"""Statuses opening the stream is refused with that another attempt would only repeat."""
+
+
+def opening_refusal(answer: Answer) -> LemonfiberError | None:
+    """Return the refusal an answer to opening the stream is, or None where another attempt may succeed."""
+    if answer.status in REFUSED_OUTRIGHT:
+        return refusal_of(answer)
+    return None
+
+
 def succeeded(answer: Answer) -> bool:
     """Tell whether an answer is a success."""
     return answer.status in SUCCESS

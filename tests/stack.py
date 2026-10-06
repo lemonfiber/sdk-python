@@ -59,6 +59,26 @@ class Reply:
 
 
 @dataclass(frozen=True)
+class Streamed:
+    """An event stream the stand-in sends: each chunk after its delay, then held open, then closed."""
+
+    chunks: Sequence[tuple[float, bytes]] = ()
+    hold: float = 0.0
+    abort: bool = False
+    """Whether the connection is cut rather than the stream ended."""
+
+
+def event(kind: str, data: object, event_id: str | None = None, version: int = API_VERSION) -> bytes:
+    """Return one server-sent event carrying an envelope, as lemonfiber writes one."""
+    lines = [] if event_id is None else [f"id: {event_id}"]
+    lines += [f"event: {kind}", f"data: {json.dumps(envelope(kind, data, version))}", "", ""]
+    return "\n".join(lines).encode()
+
+
+HEARTBEAT = b": heartbeat\n\n"
+
+
+@dataclass(frozen=True)
 class Arrived:
     """One request as it arrived."""
 
@@ -80,7 +100,7 @@ class Stack:
     def __init__(self, *, tls: bool = False) -> None:
         """Prepare the server, with a certificate of its own where it serves TLS."""
         self.arrived: list[Arrived] = []
-        self._replies: dict[tuple[str, str], list[Reply]] = {}
+        self._replies: dict[tuple[str, str], list[Reply | Streamed]] = {}
         self._loop = asyncio.new_event_loop()
         self._thread = threading.Thread(target=self._loop.run_forever, daemon=True)
         self._runner: web.AppRunner | None = None
@@ -98,7 +118,7 @@ class Stack:
             self.pin = hashlib.sha256(der).hexdigest()
         self.port = 0
 
-    def reply(self, method: str, path: str, *replies: Reply) -> None:
+    def reply(self, method: str, path: str, *replies: Reply | Streamed) -> None:
         """Answer a method and path with these replies in turn, the last one from then on."""
         self._replies[method, path] = list(replies)
 
@@ -117,16 +137,29 @@ class Stack:
         if not queued:
             return web.Response(status=599, text="the stand-in was not told how to answer this")
         reply = queued.pop(0) if len(queued) > 1 else queued[0]
+        if isinstance(reply, Streamed):
+            return await self._stream(request, reply)
         if reply.delay:
             await asyncio.sleep(reply.delay)
         content, content_type = reply.encoded()
         headers = {"Content-Type": content_type, **reply.headers}
         return web.Response(status=reply.status, body=content, headers=headers)
 
+    async def _stream(self, request: web.Request, reply: Streamed) -> web.StreamResponse:
+        response = web.StreamResponse(headers={"Content-Type": "text/event-stream"})
+        await response.prepare(request)
+        for delay, chunk in reply.chunks:
+            await asyncio.sleep(delay)
+            await response.write(chunk)
+        await asyncio.sleep(reply.hold)
+        if reply.abort and request.transport is not None:
+            request.transport.abort()
+        return response
+
     async def _start(self) -> None:
         application = web.Application()
         application.router.add_route("*", "/{tail:.*}", self._handle)
-        self._runner = web.AppRunner(application, access_log=None)
+        self._runner = web.AppRunner(application, access_log=None, shutdown_timeout=0.1)
         await self._runner.setup()
         site = web.TCPSite(self._runner, "127.0.0.1", 0, ssl_context=self._context)
         await site.start()
@@ -136,6 +169,10 @@ class Stack:
     async def _stop(self) -> None:
         if self._runner is not None:
             await self._runner.cleanup()
+        pending = [task for task in asyncio.all_tasks() if task is not asyncio.current_task()]
+        for task in pending:
+            task.cancel()
+        await asyncio.gather(*pending, return_exceptions=True)
 
     def __enter__(self) -> Self:
         """Start listening."""
