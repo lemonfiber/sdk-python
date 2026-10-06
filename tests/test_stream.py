@@ -173,14 +173,16 @@ def test_a_refused_credential_is_raised_rather_than_retried(client: Driver, stac
 
 def test_a_stream_this_stack_does_not_serve_is_raised(client: Driver, stack: Stack) -> None:
     stack.reply("GET", "/api/events", Reply(404, "No such page."))
+    followed = follow(client)
     with pytest.raises(MissingError):
-        follow(client).take(1)
+        followed.take(1)
 
 
 def test_an_event_in_another_version_is_refused_naming_both(client: Driver, stack: Stack) -> None:
     stack.reply("GET", "/api/events", Streamed([(0, event("status", {}, "1", version=2))], hold=1))
+    followed = follow(client)
     with pytest.raises(ApiVersionMismatchError):
-        follow(client).take(1)
+        followed.take(1)
 
 
 def test_a_kind_this_package_does_not_know_is_named_and_not_handed_over(client: Driver, stack: Stack) -> None:
@@ -195,8 +197,9 @@ def test_a_kind_this_package_does_not_know_is_named_and_not_handed_over(client: 
 def test_the_stream_is_held_to_the_pin(flavour: Flavour, tls_stack: Stack) -> None:
     tls_stack.reply("GET", "/api/events", Streamed([(0, event("news", NEWS["data"]))], hold=1))
     wrong = connect(flavour, Address(tls_stack.url, pin="0" * 64), Credential(PRINTED))
+    followed = follow(wrong)
     with pytest.raises(CertificateRefusedError) as refused:
-        follow(wrong).take(1)
+        followed.take(1)
     assert refused.value.__context__ is None
     wrong.close()
     assert tls_stack.arrived == []
@@ -278,6 +281,7 @@ def test_the_stream_is_never_followed_through_a_callers_proxy(stack: Stack) -> N
             await session.close()
             await asyncio.sleep(0)
 
+    following = follow_through_a_proxy()
     with pytest.raises(ConfigurationError):
-        asyncio.run(follow_through_a_proxy())
+        asyncio.run(following)
     assert stack.arrived == []
