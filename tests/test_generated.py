@@ -5,8 +5,8 @@ import json
 import pathlib
 
 import lemonfiber
+from lemonfiber import _generated as generated
 from lemonfiber import contract
-from lemonfiber._generated import contract as generated
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 ARTEFACT = json.loads((ROOT / "contract/web-api.contract.json").read_text(encoding="utf-8"))

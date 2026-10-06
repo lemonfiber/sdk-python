@@ -1,7 +1,6 @@
 # Copyright (c) 2026 NightWorksIO
 """Generating the shapes from the artefact, and refusing an artefact that cannot be read one way."""
 
-import importlib.util
 import json
 import pathlib
 import typing
@@ -9,87 +8,9 @@ import typing
 import pytest
 
 from scripts import contract_generate
-from scripts.contract_generate import OUT, STAMP, ArtefactRefusedError, generate, run
-
-if typing.TYPE_CHECKING:
-    import types
-
-ENVELOPE_DESCRIPTION = "The wrapper every machine-readable payload arrives in."
-
-
-def kind(data: object, definitions: dict[str, object] | None = None) -> dict[str, object]:
-    """Return one kind's envelope schema, as the core writes one."""
-    schema: dict[str, object] = {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "title": "Envelope",
-        "description": ENVELOPE_DESCRIPTION,
-        "type": "object",
-        "properties": {
-            "api_version": {"type": "integer", "format": "uint32", "minimum": 0},
-            "data": data,
-            "host": {"type": ["string", "null"]},
-            "kind": {"type": "string"},
-        },
-        "required": ["api_version", "kind", "data"],
-    }
-    if definitions is not None:
-        schema["$defs"] = definitions
-    return schema
-
-
-def artefact(
-    kinds: dict[str, object],
-    refusals: object = None,
-    version: object = 1,
-    key_callable: object = None,
-) -> dict[str, object]:
-    """Return a whole artefact describing these kinds."""
-    whole: dict[str, object] = {"api_version": version, "kinds": kinds}
-    if refusals is not None:
-        whole["refusals"] = refusals
-    if key_callable is not None:
-        whole["key_callable"] = key_callable
-    return whole
-
-
-def write(root: pathlib.Path, whole: object, stamp: str | None = "v1.0.0") -> None:
-    """Vendor an artefact under `root` as `contract/` holds one."""
-    (root / "contract").mkdir(parents=True, exist_ok=True)
-    (root / "contract" / "web-api.contract.json").write_text(json.dumps(whole), encoding="utf-8")
-    if stamp is not None:
-        (root / "contract" / "VERSION").write_text(f"{stamp}\n", encoding="utf-8")
-
-
-def load(root: pathlib.Path) -> types.ModuleType:
-    """Import the contract module generated under `root`."""
-    path = root / OUT / "contract.py"
-    spec = importlib.util.spec_from_file_location(f"generated_{abs(hash(root))}", path)
-    assert spec is not None
-    assert spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-def generated(tmp_path: pathlib.Path, whole: object) -> types.ModuleType:
-    """Generate from an artefact and import what was written."""
-    write(tmp_path, whole)
-    assert run(tmp_path) == 0
-    return load(tmp_path)
-
-
-def refusal(whole: dict[str, object]) -> str:
-    """Return the sentence generation refuses an artefact with."""
-    with pytest.raises(ArtefactRefusedError) as refused:
-        generate(whole, "v1.0.0")
-    return str(refused.value)
-
-
-def keys(module: types.ModuleType, name: str) -> tuple[set[str], set[str]]:
-    """Return a generated TypedDict's required and optional keys."""
-    shape = getattr(module, name)
-    return set(shape.__required_keys__), set(shape.__optional_keys__)
-
+from scripts.contract_generator import OUT, generate, run
+from scripts.contract_sync import STAMP
+from tests.generating import CODE, artefact, generated, keys, kind, refusal, source, write
 
 PROBLEM = {
     "description": "Something that went wrong.",
@@ -107,7 +28,6 @@ PROBLEM = {
     },
     "required": ["code", "remedies", "severity"],
 }
-CODE = {"description": "A stable identifier.\n\nNever recycled.", "type": "string"}
 
 
 def test_the_vendored_artefact_generates_what_is_committed() -> None:
@@ -115,11 +35,11 @@ def test_the_vendored_artefact_generates_what_is_committed() -> None:
     whole = json.loads((root / "contract/web-api.contract.json").read_text(encoding="utf-8"))
     stamp = (root / "contract/VERSION").read_text(encoding="utf-8").strip()
     files = generate(whole, stamp)
-    assert set(files) == {OUT / "__init__.py", OUT / "contract.py"}
-    committed = (root / OUT / "contract.py").read_text(encoding="utf-8")
-    for name in ("class StatusEnvelope(typing.TypedDict):", f"artefact at {stamp}", "__all__ = ["):
-        assert name in files[OUT / "contract.py"]
-        assert name in committed
+    committed = {path.relative_to(root): path for path in (root / OUT).rglob("*.py")}
+    assert set(files) == set(committed)
+    for path, written in files.items():
+        assert committed[path].read_text(encoding="utf-8") == written
+    assert f"artefact at {stamp}" in files[OUT / "__init__.py"]
 
 
 def test_an_object_is_a_typed_dict_with_its_required_and_optional_keys(tmp_path: pathlib.Path) -> None:
@@ -169,8 +89,8 @@ def test_a_tagged_union_names_each_variant_for_its_tag(tmp_path: pathlib.Path) -
     assert keys(module, "ScopeWholeStack") == ({"scope"}, set())
     assert module.ScopeWholeStack.__doc__ == "Everything."
     assert keys(module, "ScopeService") == ({"scope", "name"}, set())
-    source = (tmp_path / OUT / "contract.py").read_text(encoding="utf-8")
-    assert 'type Scope = ScopeWholeStack | ScopeService\n"""How much a backup covers."""' in source
+    written = source(tmp_path, "kinds", "backup.py")
+    assert 'type Scope = ScopeWholeStack | ScopeService\n"""How much a backup covers."""' in written
 
 
 def test_untagged_variants_are_named_for_their_place(tmp_path: pathlib.Path) -> None:
@@ -335,7 +255,7 @@ def test_an_action_a_key_may_call_this_generator_cannot_write_is_refused(listed:
 def test_a_missing_stamp_says_the_revision_is_unknown(tmp_path: pathlib.Path) -> None:
     write(tmp_path, artefact({"pull": kind({"type": "string"})}), stamp=None)
     assert run(tmp_path) == 0
-    assert "an unknown revision" in (tmp_path / OUT / "contract.py").read_text(encoding="utf-8")
+    assert "an unknown revision" in source(tmp_path, "__init__.py")
 
 
 def test_a_version_this_package_does_not_implement_is_refused_naming_both() -> None:
