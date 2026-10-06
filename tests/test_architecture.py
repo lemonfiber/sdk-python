@@ -1,11 +1,13 @@
 # Copyright (c) 2026 NightWorksIO
-"""The rules the tree is built to: generated stays generated, and transports stay behind the client."""
+"""The rules the tree is built to: generated stays generated, transports stay behind the client, files stay short."""
 
 import ast
 import pathlib
 import re
 
 import pytest
+
+from scripts.line_cap import LineCapError, line_cap, lines_in
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 PACKAGE = ROOT / "src" / "lemonfiber"
@@ -17,6 +19,12 @@ TRANSPORTS = {
     "urllib3": PACKAGE / "_sync.py",
 }
 """Each HTTP library, and the one module allowed to import it."""
+
+SOURCES = (ROOT / "src", ROOT / "scripts")
+"""Where every file is held to the source cap."""
+
+TESTS = ROOT / "tests"
+"""Where every file is held to the test cap."""
 
 SUPPRESSIONS = re.compile(r"#\s*(type:\s*ignore|pyright:|noqa|pragma:\s*no\s*(cover|branch))", re.IGNORECASE)
 
@@ -73,3 +81,51 @@ def test_no_written_module_declares_a_response_shape(path: pathlib.Path) -> None
 def test_each_transport_is_imported_by_its_own_module_alone(library: str) -> None:
     importers = {path for path in python_files(PACKAGE) if library in imported(path)}
     assert importers <= {TRANSPORTS[library]}
+
+
+@pytest.mark.parametrize("path", python_files(*SOURCES), ids=str)
+def test_no_source_file_outgrows_its_cap(path: pathlib.Path) -> None:
+    lines = lines_in(path.read_text(encoding="utf-8"))
+    cap = line_cap(ROOT, "source")
+    assert lines <= cap, f"{path} holds {lines} lines, over the {cap} a source file may: split it by concept"
+
+
+@pytest.mark.parametrize("path", python_files(TESTS), ids=str)
+def test_no_test_file_outgrows_its_cap(path: pathlib.Path) -> None:
+    lines = lines_in(path.read_text(encoding="utf-8"))
+    cap = line_cap(ROOT, "tests")
+    assert lines <= cap, (
+        f"{path} holds {lines} lines, over the {cap} a test file may: split it by what it asserts"
+    )
+
+
+def test_each_cap_holds_files_to_it() -> None:
+    assert python_files(*SOURCES)
+    assert python_files(TESTS)
+    assert any(GENERATED in path.parents for path in python_files(*SOURCES))
+
+
+def test_a_cap_is_read_from_pyproject(tmp_path: pathlib.Path) -> None:
+    (tmp_path / "pyproject.toml").write_text("[tool.lemonfiber.line-cap]\ntests = 40\n", encoding="utf-8")
+    assert line_cap(tmp_path, "tests") == 40
+
+
+@pytest.mark.parametrize(
+    "declared",
+    [
+        "",
+        "[tool.lemonfiber.line-cap]\nsource = '550'\n",
+        "[tool.lemonfiber.line-cap]\nsource = true\n",
+        "[tool.lemonfiber.line-cap]\nsource = 0\n",
+    ],
+)
+def test_a_cap_that_is_not_a_number_of_lines_is_refused(tmp_path: pathlib.Path, declared: str) -> None:
+    (tmp_path / "pyproject.toml").write_text(declared, encoding="utf-8")
+    with pytest.raises(LineCapError, match=r"the source line cap as .*, and it is a whole number of lines"):
+        line_cap(tmp_path, "source")
+
+
+def test_a_files_lines_are_counted_as_it_holds_them() -> None:
+    assert lines_in("one\ntwo\n") == 2
+    assert lines_in("one\ntwo") == 2
+    assert lines_in("") == 0

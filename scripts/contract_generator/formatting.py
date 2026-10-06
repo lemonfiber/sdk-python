@@ -1,41 +1,17 @@
 # Copyright (c) 2026 NightWorksIO
-"""What the formatter makes of a generated module, and how many lines a module may hold."""
+"""What the formatter makes of a generated module."""
 
 import pathlib
 import subprocess
 import sysconfig
 import tempfile
-import tomllib
 from typing import TYPE_CHECKING
-
-from scripts.contract_generator.refused import refuse
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
 RUFF = pathlib.Path(sysconfig.get_path("scripts")) / "ruff"
 """The formatter the lockfile pins, installed beside the interpreter running the generator."""
-
-
-def line_cap(root: pathlib.Path) -> int:
-    """Return how many lines a source file may hold, as `pyproject.toml` declares it."""
-    declared: object = (
-        tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
-        .get("tool", {})
-        .get("lemonfiber", {})
-        .get("line-cap", {})
-        .get("source")
-    )
-    if not isinstance(declared, int) or isinstance(declared, bool) or declared < 1:
-        refuse(
-            f"pyproject.toml declares the source line cap as {declared!r}, and it is a whole number of lines",
-        )
-    return declared
-
-
-def lines_in(source: str) -> int:
-    """Return how many lines a source holds."""
-    return len(source.splitlines())
 
 
 class Formatter:

@@ -3,14 +3,15 @@
 
 import typing
 
-import pytest
-
-from scripts.contract_generator import OUT, ArtefactRefusedError, run
-from scripts.contract_generator.formatting import line_cap, lines_in
+from scripts import contract_generator
+from scripts.contract_generator import OUT, run
+from scripts.line_cap import LineCapError, lines_in
 from tests.generating import CODE, artefact, generated, kind, refusal, source, write
 
 if typing.TYPE_CHECKING:
     import pathlib
+
+    import pytest
 
 SHARED = {
     "description": "Carried by more than one kind.",
@@ -162,21 +163,11 @@ def test_what_an_earlier_generation_wrote_is_replaced(tmp_path: pathlib.Path) ->
     assert (tmp_path / OUT / "kinds" / "pull.py").is_file()
 
 
-def test_the_cap_is_the_one_pyproject_declares(tmp_path: pathlib.Path) -> None:
-    (tmp_path / "pyproject.toml").write_text("[tool.lemonfiber.line-cap]\nsource = 40\n", encoding="utf-8")
-    assert line_cap(tmp_path) == 40
+def test_a_cap_pyproject_does_not_declare_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
+    def undeclared(root: pathlib.Path, held: str) -> int:
+        message = f"no {held} cap under {root}"
+        raise LineCapError(message)
 
-
-@pytest.mark.parametrize(
-    "declared",
-    [
-        "",
-        "[tool.lemonfiber.line-cap]\nsource = '550'\n",
-        "[tool.lemonfiber.line-cap]\nsource = true\n",
-        "[tool.lemonfiber.line-cap]\nsource = 0\n",
-    ],
-)
-def test_a_cap_that_is_not_a_number_of_lines_is_refused(tmp_path: pathlib.Path, declared: str) -> None:
-    (tmp_path / "pyproject.toml").write_text(declared, encoding="utf-8")
-    with pytest.raises(ArtefactRefusedError, match="it is a whole number of lines"):
-        line_cap(tmp_path)
+    monkeypatch.setattr(contract_generator, "line_cap", undeclared)
+    said = refusal(artefact({"pull": kind({"type": "string"})}))
+    assert said.startswith("no source cap under ")

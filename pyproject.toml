@@ -99,6 +99,9 @@ do_not_mutate_patterns = ["\\bcast\\("]
 minimum-score = 90
 
 [tool.lemonfiber.line-cap]
-# The most lines a source file may hold, the generated modules included: the
-# generator writes a module that would hold more as a package of parts.
+# The most lines a file may hold, as the core holds its own. A source file, the
+# generated modules included: the generator writes a module that would hold
+# more as a package of parts. A test file holds fixtures and every case of one
+# thing, and past its cap is the tests for more than one thing.
 source = 550
+tests = 800
