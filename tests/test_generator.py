@@ -37,11 +37,18 @@ def kind(data: object, definitions: dict[str, object] | None = None) -> dict[str
     return schema
 
 
-def artefact(kinds: dict[str, object], refusals: object = None, version: object = 1) -> dict[str, object]:
+def artefact(
+    kinds: dict[str, object],
+    refusals: object = None,
+    version: object = 1,
+    key_callable: object = None,
+) -> dict[str, object]:
     """Return a whole artefact describing these kinds."""
     whole: dict[str, object] = {"api_version": version, "kinds": kinds}
     if refusals is not None:
         whole["refusals"] = refusals
+    if key_callable is not None:
+        whole["key_callable"] = key_callable
     return whole
 
 
@@ -270,6 +277,59 @@ def test_an_artefact_older_than_the_refusal_list_lists_none(tmp_path: pathlib.Pa
     module = generated(tmp_path, artefact({"pull": kind({"type": "string"})}))
     assert dict(module.REFUSAL_CODES) == {}
     assert module.RefusalCode.__value__ is typing.Never
+
+
+PULL: dict[str, object] = {"pull": kind({"type": "string"})}
+
+
+def callable_by_key(
+    action: object,
+    *,
+    disturbs: object = True,
+    rehearsal: object = False,
+) -> dict[str, object]:
+    """Return one action a key may call, as the contract lists it."""
+    return {"action": action, "disturbs": disturbs, "rehearsal": rehearsal}
+
+
+def test_the_actions_a_key_may_call_are_generated_in_the_contracts_order(tmp_path: pathlib.Path) -> None:
+    listed = [callable_by_key("restart", rehearsal=True), callable_by_key("downloads-pause", disturbs=False)]
+    module = generated(tmp_path, artefact(PULL, key_callable=listed))
+    assert list(module.KEY_CALLABLE) == ["restart", "downloads-pause"]
+    assert module.KEY_CALLABLE["restart"] == module.KeyCallable(disturbs=True, rehearsal=True)
+    assert module.KEY_CALLABLE["downloads-pause"] == module.KeyCallable(disturbs=False, rehearsal=False)
+    assert module.is_key_callable("restart")
+    assert not module.is_key_callable("uninstall")
+    assert typing.get_args(module.KeyCallableAction.__value__) == ("restart", "downloads-pause")
+    with pytest.raises(TypeError):
+        module.KEY_CALLABLE["uninstall"] = module.KeyCallable(disturbs=True, rehearsal=True)
+
+
+def test_an_artefact_older_than_the_key_callable_list_lets_a_key_call_nothing(tmp_path: pathlib.Path) -> None:
+    module = generated(tmp_path, artefact(PULL))
+    assert dict(module.KEY_CALLABLE) == {}
+    assert module.KeyCallableAction.__value__ is typing.Never
+
+
+@pytest.mark.parametrize(
+    ("listed", "said"),
+    [
+        ({}, "it is a list of actions"),
+        (["restart"], "entry 0: not an object"),
+        ([callable_by_key("Restart")], 'entry 0: action "Restart" is not an action\'s name'),
+        ([callable_by_key("restart-")], 'entry 0: action "restart-" is not an action\'s name'),
+        ([callable_by_key(None)], "entry 0: action null is not an action's name"),
+        ([callable_by_key("restart", disturbs=1)], "entry 0: disturbs 1 is not true or false"),
+        ([callable_by_key("restart", rehearsal=None)], "entry 0: rehearsal null is not true or false"),
+        (
+            [{**callable_by_key("restart"), "scope": "act"}],
+            "entry 0: carries scope, which this generator does not read",
+        ),
+        ([callable_by_key("restart"), callable_by_key("restart")], "entry 1: restart is listed twice"),
+    ],
+)
+def test_an_action_a_key_may_call_this_generator_cannot_write_is_refused(listed: object, said: str) -> None:
+    assert said in refusal(artefact(PULL, key_callable=listed))
 
 
 def test_a_missing_stamp_says_the_revision_is_unknown(tmp_path: pathlib.Path) -> None:
