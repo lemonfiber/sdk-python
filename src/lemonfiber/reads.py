@@ -107,3 +107,6 @@ JOBS: Final = "/api/jobs"
 
 SESSION: Final = "/api/session"
 """Where a password is exchanged, once, for a session."""
+
+CAPABILITIES: Final = "/api/capabilities"
+"""What the stack says it can do, for the credential that asked."""

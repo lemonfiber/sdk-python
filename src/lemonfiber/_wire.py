@@ -8,19 +8,22 @@ everything an answer means is decided here, once.
 
 import datetime
 import json
+import types
 import urllib.parse
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Final, Literal, TypeIs
+from typing import Final, Literal, TypeIs, cast
 
 from lemonfiber._generated.contract import (
     REFUSAL_CODES,
+    CapabilityState,
     Envelope,
     JobEnvelope,
     Problem,
     RefusalCode,
     is_refusal_code,
 )
+from lemonfiber.capabilities import CapabilitySet, is_state
 from lemonfiber.credential import Credential
 from lemonfiber.envelope import expect, parse_envelope
 from lemonfiber.jobs import Ended, Finished, JobStanding, Running
@@ -40,7 +43,7 @@ from lemonfiber.problems import (
     UnreachableError,
     UnreadableResponseError,
 )
-from lemonfiber.reads import ACTIONS, BUNDLE, JOBS, LOGS, SESSION, Read
+from lemonfiber.reads import ACTIONS, BUNDLE, CAPABILITIES, JOBS, LOGS, SESSION, Read
 
 type Scalar = str | int | bool
 """One value a query parameter carries."""
@@ -170,6 +173,11 @@ def read_call(read: Read, query: Query | None) -> Call:
     return Call("GET", read.path + search(query), {"Accept": JSON_TYPE})
 
 
+def capabilities_call() -> Call:
+    """Ask what the stack can do, for the credential the call carries."""
+    return Call("GET", CAPABILITIES, {"Accept": JSON_TYPE})
+
+
 def logs_call(query: Query | None) -> Call:
     """Ask for what the services have been saying."""
     return Call("GET", LOGS + search(query), {"Accept": JSON_TYPE})
@@ -243,6 +251,27 @@ def standing_of(job: str, answer: Answer) -> JobStanding:
         return Finished(job, envelope)
     started = expect(envelope, "job")
     return Running(job, started) if answer.status == STILL_GOING else Ended(job, started)
+
+
+def capabilities_of(answer: Answer) -> CapabilitySet:
+    """Read the stack's capabilities as they stood when the answer arrived, or raise the refusal it is.
+
+    A capability name this client does not know is kept, never refused (`ARCH-R81`); a state the
+    contract does not list is not a document lemonfiber writes.
+    """
+    arrived = datetime.datetime.now(datetime.UTC)
+    data = cast("object", expect(envelope_of(answer), "capabilities")["data"])
+    held = cast("dict[str, object]", data).get("capabilities") if isinstance(data, dict) else None
+    if not isinstance(held, dict):
+        msg = f"the capabilities are {held!r}, and they are an object keyed by path"
+        raise UnreadableResponseError(msg)
+    states: dict[str, CapabilityState] = {}
+    for path, state in cast("dict[object, object]", held).items():
+        if not isinstance(path, str) or not is_state(state):
+            msg = f"{path!r} is {state!r}, which is not a state a capability can be in"
+            raise UnreadableResponseError(msg)
+        states[path] = state
+    return CapabilitySet(types.MappingProxyType(states), arrived)
 
 
 def admitted_of(answer: Answer) -> Admitted:

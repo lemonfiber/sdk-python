@@ -219,6 +219,67 @@ def test_a_redirect_is_not_followed(client: Driver, stack: Stack) -> None:
     assert [arrived.path for arrived in stack.arrived] == ["/api/status"]
 
 
+SCOPED = {
+    "/api/status": "available",
+    "/api/actions/restart": "available",
+    "/api/actions/update": "unconfigured",
+    "/api/actions/uninstall": "unpermitted",
+    "/api/something-newer": "available",
+}
+
+
+def test_what_a_stack_can_do_is_read_for_the_credential_that_asked(client: Driver, stack: Stack) -> None:
+    stack.reply("GET", "/api/capabilities", Reply(body=envelope("capabilities", {"capabilities": SCOPED})))
+    before = datetime.datetime.now(datetime.UTC)
+    said = client.capabilities()
+    [arrived] = stack.arrived
+    assert arrived.url == "/api/capabilities"
+    assert arrived.headers[CREDENTIAL_HEADER] == PRINTED
+    assert arrived.headers["Accept"] == "application/json"
+    assert dict(said.states) == SCOPED
+    assert before <= said.read_at <= datetime.datetime.now(datetime.UTC)
+    assert said.available == {"/api/status", "/api/actions/restart", "/api/something-newer"}
+    assert said.unconfigured == {"/api/actions/update"}
+    assert said.unpermitted == {"/api/actions/uninstall"}
+    assert said.of_action("uninstall") == "unpermitted"
+    assert said.of_read(Read.STATUS) == "available"
+    assert said.of_action("pull") is None
+    assert said.of("/api/plugins") is None
+
+
+@pytest.mark.parametrize(
+    ("data", "what"),
+    [
+        ({"capabilities": []}, "the capabilities are [], and they are an object keyed by path"),
+        ("capabilities", "the capabilities are None, and they are an object keyed by path"),
+        (
+            {"capabilities": {"/api/status": "maybe"}},
+            "'/api/status' is 'maybe', which is not a state a capability can be in",
+        ),
+        (
+            {"capabilities": {"/api/status": 1}},
+            "'/api/status' is 1, which is not a state a capability can be in",
+        ),
+    ],
+)
+def test_capabilities_lemonfiber_does_not_write_are_refused(
+    client: Driver,
+    stack: Stack,
+    data: object,
+    what: str,
+) -> None:
+    stack.reply("GET", "/api/capabilities", Reply(body=envelope("capabilities", data)))
+    with pytest.raises(UnreadableResponseError) as refused:
+        client.capabilities()
+    assert refused.value.what == what
+
+
+def test_capabilities_refused_are_a_refusal(client: Driver, stack: Stack) -> None:
+    stack.reply("GET", "/api/capabilities", Reply(403, problem("ADMIT-4", "Not admitted.")))
+    with pytest.raises(NotAdmittedError):
+        client.capabilities()
+
+
 def test_the_logs_are_an_envelope_a_line(client: Driver, stack: Stack) -> None:
     lines = '{"api_version":1,"kind":"log","data":{"line":"a"}}\n\n{"api_version":1,"kind":"log","data":{"line":"b"}}\n'
     stack.reply("GET", "/api/logs", Reply(body=lines))

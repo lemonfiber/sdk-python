@@ -16,6 +16,7 @@ if TYPE_CHECKING:
         Address,
         Admitted,
         Bundle,
+        CapabilitySet,
         Credential,
         Ended,
         Envelope,
@@ -105,6 +106,10 @@ class Driver(Protocol):
         """Read."""
         ...
 
+    def capabilities(self) -> CapabilitySet:
+        """Ask what the stack can do."""
+        ...
+
     def logs(self, query: Query | None = None) -> list[Envelope]:
         """Read the logs."""
         ...
@@ -156,6 +161,10 @@ class SyncDriver:
     def read(self, read: Read, query: Query | None = None) -> Envelope:
         """Read."""
         return self.client.read(read, query)
+
+    def capabilities(self) -> CapabilitySet:
+        """Ask what the stack can do."""
+        return self.client.capabilities()
 
     def logs(self, query: Query | None = None) -> list[Envelope]:
         """Read the logs."""
@@ -221,6 +230,10 @@ class AsyncDriver:
     def read(self, read: Read, query: Query | None = None) -> Envelope:
         """Read."""
         return self.run(self.client.read(read, query))
+
+    def capabilities(self) -> CapabilitySet:
+        """Ask what the stack can do."""
+        return self.run(self.client.capabilities())
 
     def logs(self, query: Query | None = None) -> list[Envelope]:
         """Read the logs."""

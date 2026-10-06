@@ -33,6 +33,7 @@ NOT_A_READ = {
     "/api/actions": "the one door every action is asked for through",
     "/api/jobs": "where work already begun is asked about and released",
     "/api/session": "where a password is exchanged for a session",
+    "/api/capabilities": "what the stack says it can do, which has its own section",
 }
 """Paths this client holds that the reading block does not name, each with what it is instead."""
 FEWEST = 25
