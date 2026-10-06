@@ -71,6 +71,12 @@ CODE = re.compile(r"^[A-Z][A-Z0-9]*-\d+$")
 SCREAMING_SNAKE = re.compile(r"^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$")
 """A registry name, as the core spells one: `NOT_ADMITTED`."""
 
+ACTION = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
+"""An action's name, as `POST /api/actions/<action>` spells one: `downloads-pause`."""
+
+CALLABLE_FIELDS = ("action", "disturbs", "rehearsal")
+"""Everything the contract says of an action a key may call, in that order. Anything else is refused, not dropped."""
+
 REFUSAL_STATUSES = range(400, 600)
 """The statuses a refusal may be answered with: the request's fault or the machine's."""
 
@@ -98,6 +104,10 @@ OWNED = {
     "ListedRefusal": "what the contract says of one refusal code",
     "REFUSAL_CODES": "what the contract says of each refusal code",
     "is_refusal_code": "whether a code is one the contract lists",
+    "KeyCallableAction": "every action a key may call",
+    "KeyCallable": "what the contract says of one action a key may call",
+    "KEY_CALLABLE": "what the contract says of each action a key may call",
+    "is_key_callable": "whether an action is one a key may call",
 }
 """Names this generator writes itself, and what each one means here."""
 
@@ -217,6 +227,40 @@ def malformed_refusal(code: str, entry: object) -> Iterator[str]:
         yield f"{code}: status {json.dumps(status)} is not a refusal's status"
     if not isinstance(description, str) or not description.strip():
         yield f"{code}: description {json.dumps(description)} is not a sentence"
+
+
+@dataclass(frozen=True)
+class ByKey:
+    """One action a key may call, as the contract lists it."""
+
+    action: str
+    disturbs: bool
+    rehearsal: bool
+
+
+def read_by_key(at: int, entry: object) -> tuple[ByKey | None, list[str]]:
+    """Return one action a key may call, or everything wrong with it as lines naming where it sits."""
+    listed = object_of(entry)
+    if listed is None:
+        return None, [f"entry {at}: not an object"]
+    action, disturbs, rehearsal = (listed.get(one) for one in CALLABLE_FIELDS)
+    wrong: list[str] = []
+    if not isinstance(action, str) or not ACTION.fullmatch(action):
+        wrong.append(f"entry {at}: action {json.dumps(action)} is not an action's name")
+    for flag, value in zip(CALLABLE_FIELDS[1:], (disturbs, rehearsal), strict=True):
+        if not isinstance(value, bool):
+            wrong.append(f"entry {at}: {flag} {json.dumps(value)} is not true or false")
+    unread = sorted(set(listed) - set(CALLABLE_FIELDS))
+    if unread:
+        wrong.append(f"entry {at}: carries {', '.join(unread)}, which this generator does not read")
+    if (
+        wrong
+        or not isinstance(action, str)
+        or not isinstance(disturbs, bool)
+        or not isinstance(rehearsal, bool)
+    ):
+        return None, wrong
+    return ByKey(action, disturbs, rehearsal), []
 
 
 @dataclass(frozen=True)
@@ -537,6 +581,32 @@ def refusals_of(artefact: Mapping[str, object]) -> dict[str, dict[str, object]]:
     return as_maps(refusals)
 
 
+def key_callable_of(artefact: Mapping[str, object]) -> list[ByKey]:
+    """Return the actions a key may call, in the contract's order, or none for an artefact older than the list."""
+    listed = artefact.get("key_callable", [])
+    entries = array_of(listed)
+    if entries is None:
+        refuse(f"the vendored contract's key_callable is {json.dumps(listed)}, and it is a list of actions")
+    read: list[ByKey] = []
+    problems: list[str] = []
+    seen: set[str] = set()
+    for at, entry in enumerate(entries):
+        one, wrong = read_by_key(at, entry)
+        problems.extend(wrong)
+        if one is None:
+            continue
+        if one.action in seen:
+            problems.append(f"entry {at}: {one.action} is listed twice")
+        seen.add(one.action)
+        read.append(one)
+    if problems:
+        refuse(
+            "the vendored contract lists an action a key may call that this generator cannot write:\n  "
+            + "\n  ".join(problems),
+        )
+    return read
+
+
 def envelope(writer: Writer, kind: str, schema: Mapping[str, object]) -> list[str]:
     """Write the envelope TypedDict carrying one kind, its `kind` narrowed to that kind."""
     name = f"{pascal(kind)}Envelope"
@@ -608,6 +678,46 @@ def refusal_source(refusals: Mapping[str, Mapping[str, object]]) -> list[str]:
     return lines
 
 
+def key_callable_source(callable_by_key: Sequence[ByKey]) -> list[str]:
+    """Write the actions a key may call, and what the contract says of each."""
+    quoted = [json.dumps(one.action) for one in callable_by_key]
+    union = f"typing.Literal[{', '.join(quoted)}]" if quoted else "typing.Never"
+    lines = [
+        "",
+        "",
+        f"type KeyCallableAction = {union}",
+        '"""Every action a key may call; any other is refused to a key, naming its scope."""',
+        "",
+        "",
+        "class KeyCallable(typing.NamedTuple):",
+        '    """What the contract says of one action a key may call."""',
+        "",
+        "    disturbs: bool",
+        '    """Whether calling it disturbs the running system."""',
+        "    rehearsal: bool",
+        '    """Whether it takes `dry_run`, so it can be rehearsed before the real call is offered."""',
+        "",
+        "",
+        "KEY_CALLABLE: typing.Final[typing.Mapping[KeyCallableAction, KeyCallable]] = types.MappingProxyType({",
+    ]
+    lines.extend(
+        f"    {json.dumps(one.action)}: KeyCallable({one.disturbs}, {one.rehearsal}),"
+        for one in callable_by_key
+    )
+    lines.extend(
+        [
+            "})",
+            '"""What the contract says of each action a key may call, in the order it lists them."""',
+            "",
+            "",
+            "def is_key_callable(value: str) -> typing.TypeIs[KeyCallableAction]:",
+            '    """Tell whether an action is one the contract says a key may call."""',
+            "    return value in KEY_CALLABLE",
+        ],
+    )
+    return lines
+
+
 def generate(artefact: Mapping[str, object], stamp: str) -> dict[pathlib.Path, str]:
     """Return every generated file's path and source, or raise the refusal."""
     if stamp != UNKNOWN and not REVISION.fullmatch(stamp):
@@ -626,6 +736,7 @@ def generate(artefact: Mapping[str, object], stamp: str) -> dict[pathlib.Path, s
             "one of the two:\n  " + "\n  ".join(found),
         )
     refusals = refusals_of(artefact)
+    callable_by_key = key_callable_of(artefact)
 
     writer = Writer()
     names = sorted(kinds)
@@ -689,6 +800,7 @@ def generate(artefact: Mapping[str, object], stamp: str) -> dict[pathlib.Path, s
         )
     source.append("")
     source.extend(refusal_source(refusals))
+    source.extend(key_callable_source(callable_by_key))
     published = sorted(
         {*writer.shapes, *(f"{pascal(kind)}Envelope" for kind in names), *OWNED} - {"typing", "types"},
     )

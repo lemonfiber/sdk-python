@@ -9298,6 +9298,38 @@ def is_refusal_code(value: str) -> typing.TypeIs[RefusalCode]:
     return value in REFUSAL_CODES
 
 
+type KeyCallableAction = typing.Literal[
+    "restart", "diagnose", "update", "downloads-pause", "downloads-resume"
+]
+"""Every action a key may call; any other is refused to a key, naming its scope."""
+
+
+class KeyCallable(typing.NamedTuple):
+    """What the contract says of one action a key may call."""
+
+    disturbs: bool
+    """Whether calling it disturbs the running system."""
+    rehearsal: bool
+    """Whether it takes `dry_run`, so it can be rehearsed before the real call is offered."""
+
+
+KEY_CALLABLE: typing.Final[typing.Mapping[KeyCallableAction, KeyCallable]] = types.MappingProxyType(
+    {
+        "restart": KeyCallable(True, True),
+        "diagnose": KeyCallable(True, False),
+        "update": KeyCallable(True, True),
+        "downloads-pause": KeyCallable(False, True),
+        "downloads-resume": KeyCallable(False, True),
+    }
+)
+"""What the contract says of each action a key may call, in the order it lists them."""
+
+
+def is_key_callable(value: str) -> typing.TypeIs[KeyCallableAction]:
+    """Tell whether an action is one the contract says a key may call."""
+    return value in KEY_CALLABLE
+
+
 __all__ = [
     "Action",
     "ActionDelete",
@@ -9471,8 +9503,11 @@ __all__ = [
     "Item",
     "JobEnvelope",
     "Jump",
+    "KEY_CALLABLE",
     "KINDS",
     "Kept",
+    "KeyCallable",
+    "KeyCallableAction",
     "KeyListing",
     "KeyPurpose",
     "KeySource",
@@ -9886,5 +9921,6 @@ __all__ = [
     "WizardReport",
     "WizardStep",
     "WordEnvelope",
+    "is_key_callable",
     "is_refusal_code",
 ]

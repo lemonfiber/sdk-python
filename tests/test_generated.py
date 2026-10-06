@@ -35,6 +35,21 @@ def test_a_code_is_listed_only_where_the_artefact_lists_it() -> None:
     assert not lemonfiber.is_refusal_code("ADMIT-0")
 
 
+def test_every_action_a_key_may_call_says_what_the_artefact_says() -> None:
+    listed = ARTEFACT["key_callable"]
+    assert list(lemonfiber.KEY_CALLABLE) == [entry["action"] for entry in listed]
+    for entry in listed:
+        assert lemonfiber.KEY_CALLABLE[entry["action"]] == lemonfiber.KeyCallable(
+            disturbs=entry["disturbs"],
+            rehearsal=entry["rehearsal"],
+        )
+
+
+def test_an_action_is_key_callable_only_where_the_artefact_lists_it() -> None:
+    assert lemonfiber.is_key_callable("restart")
+    assert not lemonfiber.is_key_callable("uninstall")
+
+
 def test_the_contract_module_hands_on_every_generated_shape() -> None:
     for name in generated.__all__:
         assert getattr(contract, name) is getattr(generated, name)
