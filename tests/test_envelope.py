@@ -16,7 +16,7 @@ from lemonfiber import (
     parse_envelope,
     read_envelope,
 )
-from lemonfiber._generated.contract import CONTRACT_API_VERSION
+from lemonfiber._generated import CONTRACT_API_VERSION
 
 STATUS = {"api_version": SPOKEN_API_VERSION, "kind": "pull", "data": "an image"}
 

@@ -39,14 +39,14 @@ test *args:
 coverage:
     uv run pytest --cov --cov-report=term-missing --cov-report=xml
 
-# Rewrite `src/lemonfiber/_generated/` from the vendored contract.
+# Rewrite `src/lemonfiber/_generated/` from the vendored contract, as the formatter writes it.
 generate:
     uv run python -m scripts.contract_generate
-    uv run ruff format src/lemonfiber/_generated
 
-# Regenerate and fail on any difference from what is committed.
+# Regenerate and fail on any difference from what is committed, a module it added or removed included.
 contract-check: generate
     git diff --exit-code -- src/lemonfiber/_generated contract
+    test -z "$(git status --porcelain --untracked-files=all -- src/lemonfiber/_generated contract)"
 
 # The contract at a release tag or full commit hash of lemonfiber, vendored into `contract/`.
 sync revision:

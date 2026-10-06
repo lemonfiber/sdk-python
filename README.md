@@ -64,6 +64,8 @@ Every shape the contract describes is importable from `lemonfiber.contract`.
 
 `src/lemonfiber/_generated/` is generated from the vendored `contract/web-api.contract.json`, the artefact lemonfiber builds from the types it serialises, and is never edited by hand. `contract/VERSION` records the lemonfiber commit it was taken from.
 
+Each kind's envelope and the shapes only it carries are one module under `kinds/`, the shapes several kinds carry are one module per set of kinds under `shared/`, and the refusal codes and the actions a key may call have a module each. No module holds more lines than `[tool.lemonfiber.line-cap]` in `pyproject.toml` allows a source file; one that would is written as a package of parts, each a run of shapes that name one another. `lemonfiber.contract` hands on every shape, whichever module holds it.
+
 ```sh
 uv run just sync <tag-or-commit>   # vendor the artefact one revision of lemonfiber serves
 uv run just generate               # rewrite src/lemonfiber/_generated/ from it

@@ -84,7 +84,9 @@ exclude_also = ['if __name__ == "__main__":']
 [tool.mutmut]
 source_paths = ["src/"]
 do_not_mutate = ["src/lemonfiber/_generated/*"]
-also_copy = ["contract/", "scripts/"]
+# The generator's tests run the generator, which formats what it writes as
+# `ruff.toml` configures the formatter.
+also_copy = ["contract/", "scripts/", "ruff.toml"]
 # The architecture tests read the tree as files, and under mutation the tree is
 # mutmut's rewrite of it; they kill no mutant and are run by `ci` instead.
 pytest_add_cli_args_test_selection = ["tests/", "--ignore=tests/test_architecture.py"]
@@ -95,3 +97,8 @@ do_not_mutate_patterns = ["\\bcast\\("]
 [tool.lemonfiber.mutation]
 # The share of mutants the suite must tell apart from the code, as a percentage.
 minimum-score = 90
+
+[tool.lemonfiber.line-cap]
+# The most lines a source file may hold, the generated modules included: the
+# generator writes a module that would hold more as a package of parts.
+source = 550

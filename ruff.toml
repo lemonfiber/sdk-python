@@ -32,9 +32,12 @@ exclude = ["src/lemonfiber/_generated/**"]
 # `assert` is how pytest states what it checks, a test names the status or count
 # it expects as the number itself, and a test's name is its description.
 "tests/**" = ["S101", "PLR2004", "D103"]
-# The one module that hands the generated shapes on whole: the generated module's
+# The one module that hands the generated shapes on whole: the generated package's
 # own `__all__` is the list, so there is no second copy of it here to fall behind.
 "src/lemonfiber/contract.py" = ["F403"]
+# The one subprocess the generator starts: the formatter the lockfile pins,
+# given only the files this run of the generator wrote.
+"scripts/contract_generator/formatting.py" = ["S603"]
 
 [lint.pydocstyle]
 convention = "pep257"
