@@ -176,8 +176,9 @@ def test_the_system_resolver_finds_nothing_for_a_name_that_does_not_resolve() ->
 def test_an_address_resolves_without_blocking_the_event_loop() -> None:
     address = asyncio.run(Address.resolved("http://localhost:8080"))
     assert address.host == "localhost"
+    resolving_nowhere = Address.resolved("http://name.that.does.not.resolve.invalid:8080")
     with pytest.raises(AddressRefusedError):
-        asyncio.run(Address.resolved("http://name.that.does.not.resolve.invalid:8080"))
+        asyncio.run(resolving_nowhere)
     literal = asyncio.run(Address.resolved("http://127.0.0.1:1"))
     assert literal.port == 1
     pinned = asyncio.run(Address.resolved("https://stack.invalid:1", pin=OTHER_PIN))
@@ -201,8 +202,9 @@ def test_a_literal_with_a_zone_is_read_as_its_address() -> None:
     ],
 )
 def test_a_zone_or_any_other_mark_on_a_name_is_refused(url: str) -> None:
+    resolver = resolving("127.0.0.1")
     with pytest.raises(AddressRefusedError) as refused:
-        Address(url, resolver=resolving("127.0.0.1"))
+        Address(url, resolver=resolver)
     assert str(refused.value) == NOT_AN_ADDRESS.format(url=repr(url))
 
 
@@ -329,8 +331,9 @@ def test_the_door_is_held_to_the_pin_too(flavour: Flavour, tls_stack: Stack) -> 
         "/api/session",
         Reply(body=envelope("admission", {"token": "s", "until": "2026-10-05T12:00:00"})),
     )
+    mispinned = Address(tls_stack.url, pin=OTHER_PIN)
     with pytest.raises(CertificateRefusedError):
-        admitted(flavour, Address(tls_stack.url, pin=OTHER_PIN), "hunter2")
+        admitted(flavour, mispinned, "hunter2")
     assert tls_stack.arrived == []
     assert admitted(flavour, Address(tls_stack.url, pin=tls_stack.pin), "hunter2").member is None
 
@@ -397,8 +400,9 @@ def test_a_callers_session_that_would_send_through_a_proxy_is_refused_before_any
             await session.close()
             await asyncio.sleep(0)
 
+    using = use()
     with pytest.raises(ConfigurationError) as refused:
-        asyncio.run(use())
+        asyncio.run(using)
     assert str(refused.value) == NOT_PROXIED
     assert stack.arrived == []
 
@@ -505,8 +509,9 @@ def test_a_session_that_cannot_check_a_pin_is_refused() -> None:
         finally:
             await session.close()
 
+    building = build()
     with pytest.raises(ConfigurationError) as refused:
-        asyncio.run(build())
+        asyncio.run(building)
     assert (
         str(refused.value)
         == "A session given to the client connects over TCP, so the certificate pin can be checked."

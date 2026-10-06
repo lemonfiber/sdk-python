@@ -409,8 +409,9 @@ def test_a_member_names_themself_at_the_door(flavour: Flavour, stack: Stack) -> 
 
 def test_a_wrong_password_is_refused_at_the_door(flavour: Flavour, stack: Stack) -> None:
     stack.reply("POST", "/api/session", Reply(401, problem("ADMIT-8", "That is not the password.")))
+    address = Address(stack.url)
     with pytest.raises(PasswordRefusedError) as refused:
-        admitted(flavour, Address(stack.url), "wrong")
+        admitted(flavour, address, "wrong")
     assert refused.value.code == "ADMIT-8"
     assert refused.value.status == 401
     assert refused.value.problem is not None
@@ -420,23 +421,26 @@ def test_a_wrong_password_is_refused_at_the_door(flavour: Flavour, stack: Stack)
 
 def test_a_wrong_password_said_in_nothing_is_still_refused(flavour: Flavour, stack: Stack) -> None:
     stack.reply("POST", "/api/session", Reply(401, None))
+    address = Address(stack.url)
     with pytest.raises(PasswordRefusedError) as refused:
-        admitted(flavour, Address(stack.url), "wrong")
+        admitted(flavour, address, "wrong")
     assert str(refused.value) == "That is not the password, or none is configured."
 
 
 def test_too_many_wrong_passwords_say_how_long_is_left(flavour: Flavour, stack: Stack) -> None:
     stack.reply("POST", "/api/session", Reply(429, "Wait.", {"Retry-After": "30"}))
+    address = Address(stack.url)
     with pytest.raises(TooManyAttemptsError) as refused:
-        admitted(flavour, Address(stack.url), "wrong")
+        admitted(flavour, address, "wrong")
     assert refused.value.retry_after == 30
 
 
 @pytest.mark.parametrize("until", ["tomorrow", "2026-10-05T12:00:00+02:00"])
 def test_a_session_whose_ending_cannot_be_read_is_refused(flavour: Flavour, stack: Stack, until: str) -> None:
     stack.reply("POST", "/api/session", Reply(body=envelope("admission", {"token": "s", "until": until})))
+    address = Address(stack.url)
     with pytest.raises(UnreadableResponseError) as refused:
-        admitted(flavour, Address(stack.url), "pw")
+        admitted(flavour, address, "pw")
     reason = "is not an instant" if until == "tomorrow" else "names an offset other than UTC"
     assert refused.value.what == f"{until!r} {reason}"
 
@@ -452,8 +456,9 @@ def test_a_session_with_an_offset_of_nothing_is_utc(flavour: Flavour, stack: Sta
 
 def test_a_door_slower_than_the_timeout_is_unreachable(stack: Stack) -> None:
     stack.reply("POST", "/api/session", Reply(body=ADMITTED, delay=0.4))
+    address = Address(stack.url)
     with pytest.raises(UnreachableError):
-        admit(Address(stack.url), "pw", timeout=0.1)
+        admit(address, "pw", timeout=0.1)
 
 
 def test_a_callers_session_that_raises_for_status_still_reads_the_refusal(stack: Stack) -> None:
@@ -466,5 +471,6 @@ def test_a_callers_session_that_raises_for_status_still_reads_the_refusal(stack:
         finally:
             await session.close()
 
+    asking = ask()
     with pytest.raises(MissingError):
-        asyncio.run(ask())
+        asyncio.run(asking)

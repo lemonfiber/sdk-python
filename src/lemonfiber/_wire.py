@@ -140,9 +140,17 @@ def search(query: Query | None) -> str:
     """Return a query string, or nothing where there is nothing to ask for. The credential is never in it."""
     pairs: list[tuple[str, str]] = []
     for key, value in (query or {}).items():
-        values: Sequence[Scalar] = () if value is None else [value] if isinstance(value, str | int) else value
-        pairs.extend((key, written(one)) for one in values)
+        pairs.extend((key, written(one)) for one in listed(value))
     return f"?{urllib.parse.urlencode(pairs)}" if pairs else ""
+
+
+def listed(value: Scalar | Sequence[Scalar] | None) -> Sequence[Scalar]:
+    """Return a query value as the values it sends: none for nothing, one for a scalar, each of a list."""
+    if value is None:
+        return ()
+    if isinstance(value, str | int):
+        return (value,)
+    return value
 
 
 def written(value: Scalar) -> str:

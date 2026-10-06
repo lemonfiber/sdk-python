@@ -128,6 +128,42 @@ class Route:
         return {} if self.authority is None else {"Host": self.authority}
 
 
+def split(url: str) -> tuple[urllib.parse.SplitResult, str, str, int | None]:
+    """Return an address's parts, scheme, host and port, refusing what is not an address lemonfiber prints."""
+    parts = urllib.parse.urlsplit(url.strip())
+    scheme = parts.scheme.lower()
+    if scheme not in SCHEMES:
+        msg = f"lemonfiber is reached over http or https, and {url!r} names neither."
+        raise AddressRefusedError(msg)
+    if parts.username is not None or parts.password is not None or parts.query or parts.fragment:
+        msg = "That address carries more than an address: a credential, a query or a fragment."
+        raise AddressRefusedError(msg)
+    host = parts.hostname
+    try:
+        port = parts.port
+    except ValueError:
+        port = 0
+    if not host or port == 0 or not (is_literal(host) or NAME.fullmatch(host)):
+        msg = f"{url!r} is not an address."
+        raise AddressRefusedError(msg)
+    return parts, scheme, host, port
+
+
+def vouched_for(host: str, scheme: str, pin: CertificatePin | None, resolver: Resolver) -> list[str]:
+    """Return the addresses a host is reached at, refusing one neither a pin nor this machine vouches for."""
+    if pin is not None and scheme != ENCRYPTED:
+        msg = "A pinned address is reached over https: a pin is checked against the certificate TLS presents."
+        raise AddressRefusedError(msg)
+    reached = [host] if pin is not None or is_literal(host) else resolved_once(host, resolver)
+    if pin is None and not (reached and all(is_loopback(one) for one in reached)):
+        msg = (
+            f"{host} is not on this machine, and a stack anywhere else is reached only with its "
+            "certificate pin, given with the address."
+        )
+        raise AddressRefusedError(msg)
+    return reached
+
+
 class Address:
     """A stack's base address, and the pin it is held to where it is not on this machine.
 
@@ -147,33 +183,9 @@ class Address:
         resolver: Resolver = resolve,
     ) -> None:
         """Read a base address as lemonfiber printed it, refusing one the pin does not vouch for."""
-        parts = urllib.parse.urlsplit(url.strip())
-        scheme = parts.scheme.lower()
-        if scheme not in SCHEMES:
-            msg = f"lemonfiber is reached over http or https, and {url!r} names neither."
-            raise AddressRefusedError(msg)
-        if parts.username is not None or parts.password is not None or parts.query or parts.fragment:
-            msg = "That address carries more than an address: a credential, a query or a fragment."
-            raise AddressRefusedError(msg)
-        host = parts.hostname
-        try:
-            port = parts.port
-        except ValueError:
-            port = 0
-        if not host or port == 0 or not (is_literal(host) or NAME.fullmatch(host)):
-            msg = f"{url!r} is not an address."
-            raise AddressRefusedError(msg)
+        parts, scheme, host, port = split(url)
         held = pin if isinstance(pin, CertificatePin) or pin is None else CertificatePin(pin)
-        if held is not None and scheme != ENCRYPTED:
-            msg = "A pinned address is reached over https: a pin is checked against the certificate TLS presents."
-            raise AddressRefusedError(msg)
-        reached = [host] if held is not None or is_literal(host) else resolved_once(host, resolver)
-        if held is None and not (reached and all(is_loopback(one) for one in reached)):
-            msg = (
-                f"{host} is not on this machine, and a stack anywhere else is reached only with its "
-                "certificate pin, given with the address."
-            )
-            raise AddressRefusedError(msg)
+        reached = vouched_for(host, scheme, held, resolver)
         self._scheme = scheme
         self._host = host
         self._port = port if port is not None else PORTS[scheme]
