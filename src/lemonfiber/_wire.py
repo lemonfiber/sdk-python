@@ -144,13 +144,13 @@ def search(query: Query | None) -> str:
     return f"?{urllib.parse.urlencode(pairs)}" if pairs else ""
 
 
-def listed(value: Scalar | Sequence[Scalar] | None) -> Sequence[Scalar]:
+def listed(value: Scalar | Sequence[Scalar] | None) -> list[Scalar]:
     """Return a query value as the values it sends: none for nothing, one for a scalar, each of a list."""
     if value is None:
-        return ()
+        return []
     if isinstance(value, str | int):
-        return (value,)
-    return value
+        return [value]
+    return list(value)
 
 
 def written(value: Scalar) -> str:
