@@ -207,22 +207,34 @@ def callable_by_key(
     *,
     disturbs: object = True,
     rehearsal: object = False,
+    idempotent: object = False,
 ) -> dict[str, object]:
     """Return one action a key may call, as the contract lists it."""
-    return {"action": action, "disturbs": disturbs, "rehearsal": rehearsal}
+    return {"action": action, "disturbs": disturbs, "rehearsal": rehearsal, "idempotent": idempotent}
 
 
 def test_the_actions_a_key_may_call_are_generated_in_the_contracts_order(tmp_path: pathlib.Path) -> None:
-    listed = [callable_by_key("restart", rehearsal=True), callable_by_key("downloads-pause", disturbs=False)]
+    listed = [
+        callable_by_key("restart", rehearsal=True),
+        callable_by_key("downloads-pause", disturbs=False, idempotent=True),
+    ]
     module = generated(tmp_path, artefact(PULL, key_callable=listed))
     assert list(module.KEY_CALLABLE) == ["restart", "downloads-pause"]
-    assert module.KEY_CALLABLE["restart"] == module.KeyCallable(disturbs=True, rehearsal=True)
-    assert module.KEY_CALLABLE["downloads-pause"] == module.KeyCallable(disturbs=False, rehearsal=False)
+    assert module.KEY_CALLABLE["restart"] == module.KeyCallable(
+        disturbs=True,
+        rehearsal=True,
+        idempotent=False,
+    )
+    assert module.KEY_CALLABLE["downloads-pause"] == module.KeyCallable(
+        disturbs=False,
+        rehearsal=False,
+        idempotent=True,
+    )
     assert module.is_key_callable("restart")
     assert not module.is_key_callable("uninstall")
     assert typing.get_args(module.KeyCallableAction.__value__) == ("restart", "downloads-pause")
     with pytest.raises(TypeError):
-        module.KEY_CALLABLE["uninstall"] = module.KeyCallable(disturbs=True, rehearsal=True)
+        module.KEY_CALLABLE["uninstall"] = module.KeyCallable(disturbs=True, rehearsal=True, idempotent=False)
 
 
 def test_an_artefact_older_than_the_key_callable_list_lets_a_key_call_nothing(tmp_path: pathlib.Path) -> None:
@@ -241,6 +253,7 @@ def test_an_artefact_older_than_the_key_callable_list_lets_a_key_call_nothing(tm
         ([callable_by_key(None)], "entry 0: action null is not an action's name"),
         ([callable_by_key("restart", disturbs=1)], "entry 0: disturbs 1 is not true or false"),
         ([callable_by_key("restart", rehearsal=None)], "entry 0: rehearsal null is not true or false"),
+        ([callable_by_key("restart", idempotent="no")], 'entry 0: idempotent "no" is not true or false'),
         (
             [{**callable_by_key("restart"), "scope": "act"}],
             "entry 0: carries scope, which this generator does not read",
