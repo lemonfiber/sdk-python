@@ -14,6 +14,13 @@ a number become the enum member equal to it, is the same value and no
 breakage. A consumer that records no commit yet is said so and compared with
 nothing.
 
+A change that breaks the surface on purpose lists each break it accepts in
+`pyproject.toml`, under `[tool.lemonfiber.backward-compatibility]`, by the
+symbol griffe names and the kind of break, with why. A listed break passes for
+that symbol and that kind alone, and only where a commit since the consumer's
+pin is marked breaking, which is what puts it in the changelog. An entry that
+no longer matches a break is said so, to be removed.
+
     uv run python scripts/backward_compat.py --spec ../spec
 """
 
@@ -25,10 +32,13 @@ import os
 import pathlib
 import pkgutil
 import re
+import shutil
+import subprocess
 import sys
 import tomllib
 import urllib.error
 import urllib.request
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, cast
 
 import griffe
@@ -44,6 +54,12 @@ RECORD = "_vendor/lemonfiber/REVISION"
 """Where a consumer records the commit it vendored, relative to wherever it vendors."""
 COMMIT = re.compile(r"^[0-9a-f]{40}$")
 TIMEOUT_SECONDS = 30
+
+BREAKING = re.compile(r"\A\w+(\([^)\n]*\))?!:|^BREAKING[ -]CHANGE:", re.MULTILINE)
+"""A commit message git-cliff files under breaking changes: `!` after its type, or a breaking-change footer."""
+
+type Table = dict[str, object]
+"""A TOML table, as `tomllib` reads one."""
 
 type Loaded = griffe.Object | griffe.Alias
 """A package as griffe loads it."""
@@ -96,15 +112,74 @@ def bytes_of(content: str) -> bytes:
     return base64.b64decode(content)
 
 
-def breakages(against: str, repo: pathlib.Path) -> list[str]:
+class AcceptedRefusedError(ValueError):
+    """The list of accepted breaks is not one this check can read."""
+
+
+@dataclass(frozen=True)
+class Break:
+    """One way the tree breaks a consumer's pin: the symbol, the kind of break, and griffe's words for it."""
+
+    symbol: str
+    kind: str
+    explained: str
+
+    def entry(self) -> str:
+        """Return the entry that would accept this break, as `pyproject.toml` lists one."""
+        return f'{{ symbol = "{self.symbol}", kind = "{self.kind}", reason = "..." }}'
+
+
+def accepted(repo: pathlib.Path) -> set[tuple[str, str]]:
+    """Return the symbol and kind of every break `pyproject.toml` accepts, refusing an entry without its reason."""
+    found: object = tomllib.loads((repo / "pyproject.toml").read_text(encoding="utf-8"))
+    for key in ("tool", "lemonfiber", "backward-compatibility", "accepted"):
+        found = cast("Table", found).get(key, {}) if isinstance(found, dict) else {}
+    listed: set[tuple[str, str]] = set()
+    for entry in cast("list[object]", found) if isinstance(found, list) else []:
+        fields = cast("Table", entry) if isinstance(entry, dict) else {}
+        if set(fields) != {"symbol", "kind", "reason"} or not all(
+            isinstance(value, str) and value for value in fields.values()
+        ):
+            msg = f"An accepted break names its symbol, its kind and its reason, and nothing else; {entry!r} does not."
+            raise AcceptedRefusedError(msg)
+        listed.add((cast("str", fields["symbol"]), cast("str", fields["kind"])))
+    return listed
+
+
+def marked_breaking(repo: pathlib.Path, since: str) -> bool:
+    """Tell whether a commit after `since` is marked breaking, so the changelog names the break."""
+    git = shutil.which("git")
+    if git is None:
+        msg = "git is not on the path, and the commits since a consumer's pin are read with it."
+        raise FileNotFoundError(msg)
+    log = subprocess.run(
+        [git, "-C", str(repo), "log", "--format=%B%x00", f"{since}..HEAD"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    return any(BREAKING.search(message.strip()) for message in log.split("\0"))
+
+
+def breakages(against: str, repo: pathlib.Path) -> list[Break]:
     """Return every way the working tree breaks what the commit `against` offered."""
     old = griffe.load_git(PACKAGE, ref=against, repo=repo, search_paths=["src"])
     new = griffe.load(PACKAGE, search_paths=[str(repo / "src")])
     return [
-        breakage.explain()
+        break_of(breakage)
         for breakage in griffe.find_breaking_changes(old, new)
         if not same_value(breakage, old, new)
     ]
+
+
+def break_of(breakage: griffe.Breakage) -> Break:
+    """Return a break as an entry accepts it: the object griffe names, with the parameter where it is to one."""
+    symbol = breakage.obj.path
+    for value in (breakage.old_value, breakage.new_value):
+        if isinstance(value, griffe.Parameter):
+            symbol = f"{symbol}({value.name})"
+            break
+    return Break(symbol, breakage.kind.name.lower().replace("_", "-"), breakage.explain())
 
 
 def same_value(breakage: griffe.Breakage, old: Loaded, new: Loaded) -> bool:
@@ -148,6 +223,12 @@ def run(spec: pathlib.Path, repo: pathlib.Path, fetch: Fetch = github) -> int:
     if not names:
         sys.stdout.write(f"::notice::the spec's map names no consumer of {THIS}, so nothing was compared.\n")
         return 0
+    try:
+        listed = accepted(repo)
+    except AcceptedRefusedError as refused:
+        sys.stdout.write(f"::error::{refused}\n")
+        return 1
+    judge = Judge(repo, listed)
     failed = 0
     compared = 0
     for name in names:
@@ -164,12 +245,46 @@ def run(spec: pathlib.Path, repo: pathlib.Path, fetch: Fetch = github) -> int:
                 failed += 1
                 continue
             compared += 1
-            found = breakages(pin, repo)
-            for explained in found:
-                sys.stdout.write(f"::error::breaks {name}, which vendors {pin[:8]}: {explained}\n")
-            failed += len(found)
+            failed += judge.judged(name, pin, breakages(pin, repo))
+    for symbol, kind in sorted(listed - judge.used):
+        sys.stdout.write(
+            f"::warning::{kind} of {symbol} is accepted and breaks no consumer's pin; remove it.\n",
+        )
     sys.stdout.write(f"compared against {compared} vendored commit(s) of {len(names)} consumer(s).\n")
     return 1 if failed else 0
+
+
+class Judge:
+    """Says each break of a consumer's pin, accepted or not, keeping which accepted breaks were met."""
+
+    def __init__(self, repo: pathlib.Path, listed: set[tuple[str, str]]) -> None:
+        """Hold the tree's history and the breaks it accepts, none of them met yet."""
+        self._repo = repo
+        self._listed = listed
+        self.used: set[tuple[str, str]] = set()
+
+    def judged(self, name: str, pin: str, found: list[Break]) -> int:
+        """Say each break of one consumer's pin, and return how many fail the check."""
+        failed = 0
+        accepting = [one for one in found if (one.symbol, one.kind) in self._listed]
+        for one in found:
+            if one in accepting:
+                sys.stdout.write(f"::notice::accepted, breaking {name} at {pin[:8]}: {one.explained}\n")
+                self.used.add((one.symbol, one.kind))
+            else:
+                sys.stdout.write(
+                    f"::error::breaks {name}, which vendors {pin[:8]}: {one.explained}. If it is meant, "
+                    f"accept it under [tool.lemonfiber.backward-compatibility] in pyproject.toml: {one.entry()}\n",
+                )
+                failed += 1
+        if accepting and not marked_breaking(self._repo, pin):
+            sys.stdout.write(
+                f"::error::breaks of {name}'s pin are accepted, and no commit since {pin[:8]} is marked "
+                "breaking, with `!` after its type or a BREAKING CHANGE footer, so the changelog would "
+                "not name them.\n",
+            )
+            failed += 1
+        return failed
 
 
 def main() -> int:

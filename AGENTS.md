@@ -55,3 +55,7 @@ Mutation testing (`just mutation`) and the backward-compatibility check
 - Cite a spec identifier in a commit `Spec:` trailer and the PR body.
 - Sign off every commit (`git commit -s`); the DCO gate fails without it.
 - No AI attribution in commits, PR bodies, or comments.
+- A break of the public surface made on purpose is listed under
+  `[tool.lemonfiber.backward-compatibility]` in `pyproject.toml`, as the
+  check's failure names it, and its commit is marked breaking (`!` after the
+  type, or a `BREAKING CHANGE:` footer) so the changelog names it.
