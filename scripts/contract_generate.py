@@ -16,7 +16,7 @@ import pathlib
 import re
 import sys
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, NoReturn, TypeIs, cast
+from typing import TYPE_CHECKING, NoReturn, cast
 
 from scripts.contract_sync import REVISION
 
@@ -106,14 +106,14 @@ class ArtefactRefusedError(Exception):
     """The artefact cannot be generated from, and nothing was written."""
 
 
-def is_list(node: object) -> TypeIs[list[object]]:
-    """Tell whether a decoded JSON value is an array."""
-    return isinstance(node, list)
+def array_of(node: object) -> list[object] | None:
+    """Return a decoded JSON value as the array it is, or None where it is not one."""
+    return cast("list[object]", node) if isinstance(node, list) else None
 
 
-def is_map(node: object) -> TypeIs[dict[str, object]]:
-    """Tell whether a decoded JSON value is an object, whose keys JSON makes strings."""
-    return isinstance(node, dict)
+def object_of(node: object) -> dict[str, object] | None:
+    """Return a decoded JSON value as the object it is, whose keys JSON makes strings, or None."""
+    return cast("dict[str, object]", node) if isinstance(node, dict) else None
 
 
 def as_list(node: object) -> list[object]:
@@ -185,16 +185,18 @@ def ambiguous(node: object, path: str) -> Iterator[str]:
     Draft-07 readers discard whatever accompanies a `$ref` and 2020-12 readers
     apply both, so such a shape means two different things to two readers.
     """
-    if is_list(node):
-        for at, item in enumerate(node):
+    items = array_of(node)
+    if items is not None:
+        for at, item in enumerate(items):
             yield from ambiguous(item, f"{path}/{at}")
         return
-    if not is_map(node):
+    named = object_of(node)
+    if named is None:
         return
-    constraints = sorted(key for key in node if key != "$ref" and key not in ANNOTATIONS)
-    if "$ref" in node and constraints:
+    constraints = sorted(key for key in named if key != "$ref" and key not in ANNOTATIONS)
+    if "$ref" in named and constraints:
         yield f"{path} ({', '.join(constraints)})"
-    for key, value in node.items():
+    for key, value in named.items():
         yield from ambiguous(value, f"{path}/{key}")
 
 
@@ -202,10 +204,10 @@ def malformed_refusal(code: str, entry: object) -> Iterator[str]:
     """Yield everything wrong with one listed refusal, as lines naming its code."""
     if not CODE.fullmatch(code):
         yield f"{json.dumps(code)}: not a code, which is a prefix and a number"
-    if not is_map(entry):
+    listed = object_of(entry)
+    if listed is None:
         yield f"{code}: not an object"
         return
-    listed = entry
     name = listed.get("name")
     status = listed.get("status")
     description = listed.get("description")
@@ -359,12 +361,13 @@ class Writer:
     @staticmethod
     def node(schema: object, origin: str) -> dict[str, object]:
         """Return a schema as an object, refusing one this generator does not read."""
-        if not is_map(schema):
+        node = object_of(schema)
+        if node is None:
             refuse(f"{origin} is {json.dumps(schema)}, which is not a schema this generator reads")
-        unread = sorted(set(schema) - UNDERSTOOD)
+        unread = sorted(set(node) - UNDERSTOOD)
         if unread:
             refuse(f"{origin} uses {', '.join(unread)}, which this generator does not read")
-        return schema
+        return node
 
     @staticmethod
     def types_of(node: Mapping[str, object]) -> list[str]:
@@ -495,9 +498,9 @@ class Writer:
 def kinds_of(artefact: Mapping[str, object]) -> dict[str, dict[str, object]]:
     """Return the artefact's kinds, refusing an artefact describing none."""
     kinds = artefact.get("kinds")
-    if not is_map(kinds) or not kinds:
+    described = object_of(kinds)
+    if not described:
         refuse("the vendored contract describes no kinds")
-    described = kinds
     spelled: dict[str, str] = {}
     for kind, schema in sorted(described.items()):
         if not KIND.fullmatch(kind):
@@ -514,11 +517,11 @@ def kinds_of(artefact: Mapping[str, object]) -> dict[str, dict[str, object]]:
 def refusals_of(artefact: Mapping[str, object]) -> dict[str, dict[str, object]]:
     """Return the listed refusals, or none for an artefact older than the list."""
     listed = artefact.get("refusals", {})
-    if not is_map(listed):
+    refusals = object_of(listed)
+    if refusals is None:
         refuse(
             f"the vendored contract's refusals are {json.dumps(listed)}, and they are an object keyed by code",
         )
-    refusals = listed
     problems = [line for code in sorted(refusals) for line in malformed_refusal(code, refusals[code])]
     named: dict[str, str] = {}
     if not problems:
@@ -707,9 +710,10 @@ def read_artefact(root: pathlib.Path) -> tuple[dict[str, object], str]:
     except (OSError, ValueError) as unreadable:
         message = f"{ARTEFACT} could not be read: {unreadable}"
         raise ArtefactRefusedError(message) from unreadable
-    if not is_map(artefact):
+    read = object_of(artefact)
+    if read is None:
         refuse(f"{ARTEFACT} is not an object")
-    return artefact, stamp
+    return read, stamp
 
 
 def run(root: pathlib.Path) -> int:
