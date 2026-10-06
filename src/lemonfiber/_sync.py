@@ -27,11 +27,11 @@ if TYPE_CHECKING:
     from types import TracebackType
 
     from lemonfiber._generated import Envelope, JobEnvelope
-    from lemonfiber._protocol.answers import Admitted, Bundle
     from lemonfiber._protocol.calls import Json, Query
     from lemonfiber.address import Address, Route
     from lemonfiber.capabilities import CapabilitySet
-    from lemonfiber.credential import Credential
+    from lemonfiber.credential import Credential, Session
+    from lemonfiber.files import BundleFile
     from lemonfiber.jobs import JobStanding
     from lemonfiber.reads import Read
     from lemonfiber.stream import Arrival, Live, Stale
@@ -172,7 +172,7 @@ class SyncClient:
         """Ask for what the services have been saying, a `log` envelope a line."""
         return self._run(operation.logs(query))
 
-    def bundle(self, name: str) -> Bundle:
+    def bundle(self, name: str) -> BundleFile:
         """Fetch one support bundle this run wrote, by name, as the bytes it is."""
         return self._run(operation.bundle(name))
 
@@ -367,7 +367,7 @@ def admit(
     *,
     name: str | None = None,
     timeout: float = DEFAULT_TIMEOUT,
-) -> Admitted:
+) -> Session:
     """Offer a password, once, and come away with a session or with why there is none.
 
     A household member gives their `name`; the operator gives none. The session's
