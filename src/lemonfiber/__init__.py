@@ -11,17 +11,22 @@ its kind (`lemonfiber.contract` holds each shape), and every failure is a
 
 from lemonfiber._aio import AsyncClient, AsyncStream, admit_async
 from lemonfiber._generated.contract import (
+    KEY_CALLABLE,
     KINDS,
     REFUSAL_CODES,
     Envelope,
+    KeyCallable,
+    KeyCallableAction,
     Kind,
     ListedRefusal,
     RefusalCode,
+    is_key_callable,
     is_refusal_code,
 )
 from lemonfiber._sync import SyncClient, SyncStream, admit
 from lemonfiber._wire import Admitted, Bundle, Json, Query
 from lemonfiber.address import Address, CertificatePin, Route
+from lemonfiber.capabilities import CapabilitySet
 from lemonfiber.credential import CREDENTIAL_HEADER, Credential
 from lemonfiber.envelope import SPOKEN_API_VERSION, expect, parse_envelope, read_envelope
 from lemonfiber.jobs import Ended, Finished, JobStanding, Running
@@ -55,6 +60,7 @@ from lemonfiber.stream import HEARTBEAT, SILENCE_ALLOWED, Arrival, Break, Gap, L
 __all__ = [
     "CREDENTIAL_HEADER",
     "HEARTBEAT",
+    "KEY_CALLABLE",
     "KINDS",
     "REFUSAL_CODES",
     "SILENCE_ALLOWED",
@@ -69,6 +75,7 @@ __all__ = [
     "Break",
     "Bundle",
     "BusyError",
+    "CapabilitySet",
     "CertificatePin",
     "CertificateRefusedError",
     "ConfigurationError",
@@ -82,6 +89,8 @@ __all__ = [
     "Gap",
     "JobStanding",
     "Json",
+    "KeyCallable",
+    "KeyCallableAction",
     "Kind",
     "LemonfiberError",
     "ListedRefusal",
@@ -111,6 +120,7 @@ __all__ = [
     "admit",
     "admit_async",
     "expect",
+    "is_key_callable",
     "is_refusal_code",
     "parse_envelope",
     "read_envelope",

@@ -1,5 +1,5 @@
 # Copyright (c) 2026 NightWorksIO
-"""The lemonfiber contract's shapes, generated from the artefact at 2112d04d879bc16f9a6f9f44aa4027613a48b803.
+"""The lemonfiber contract's shapes, generated from the artefact at 79bb11356f6a117d14293c49cd2d154164c5f439.
 
 Do not edit: `just generate` rewrites this file from `contract/web-api.contract.json`,
 and CI fails on any difference.
@@ -17,6 +17,7 @@ type Action = (
     | ActionRestore
     | ActionDelete
     | ActionWithdraw
+    | ActionRewind
     | ActionRepin
     | ActionReconfigure
     | ActionRevoke
@@ -123,6 +124,24 @@ class ActionRevoke(typing.TypedDict):
     does: typing.Literal["revoke"]
     name: str
     """The key's name."""
+
+
+class ActionRewind(typing.TypedDict):
+    """Write a file back to what it held before lemonfiber wrote over it.
+
+    Only where it still holds what was written. One written since is somebody
+    else's work now, and is left exactly as it is.
+    """
+
+    does: typing.Literal["rewind"]
+    path: str
+    """The file to write back."""
+    previous: str
+    """What to write back into it."""
+    written: int
+    """The checksum of what lemonfiber wrote, which has to still be what is there
+    for writing the old text back to be undoing lemonfiber's own work.
+    """
 
 
 class ActionWithdraw(typing.TypedDict):
@@ -3848,10 +3867,16 @@ class PluginOverriding(typing.TypedDict):
 class PluginPair(typing.TypedDict):
     """One value a recipe could carry to one destination, as the operator agrees to it."""
 
-    approval: str
-    """What approving this pair is written as, on the command line and over the web."""
+    approval: typing.NotRequired[str]
+    """What approving this pair is written as, on the command line and over the web,
+    where it carries the value to a host outside the stack. Absent where it reaches
+    a service in this stack, which takes nothing off the machine and asks for no
+    approval.
+    """
     origin: str
-    """Whose value it is, as the step that captures it says; empty where no step does."""
+    """Whose value it is, as its input or the step that captures it says; empty where
+    neither does.
+    """
     to: str
     """Where it may be carried, by the name the manifest gives it."""
     value: str
@@ -9298,6 +9323,38 @@ def is_refusal_code(value: str) -> typing.TypeIs[RefusalCode]:
     return value in REFUSAL_CODES
 
 
+type KeyCallableAction = typing.Literal[
+    "restart", "diagnose", "update", "downloads-pause", "downloads-resume"
+]
+"""Every action a key may call; any other is refused to a key, naming its scope."""
+
+
+class KeyCallable(typing.NamedTuple):
+    """What the contract says of one action a key may call."""
+
+    disturbs: bool
+    """Whether calling it disturbs the running system."""
+    rehearsal: bool
+    """Whether it takes `dry_run`, so it can be rehearsed before the real call is offered."""
+
+
+KEY_CALLABLE: typing.Final[typing.Mapping[KeyCallableAction, KeyCallable]] = types.MappingProxyType(
+    {
+        "restart": KeyCallable(True, True),
+        "diagnose": KeyCallable(True, False),
+        "update": KeyCallable(True, True),
+        "downloads-pause": KeyCallable(False, True),
+        "downloads-resume": KeyCallable(False, True),
+    }
+)
+"""What the contract says of each action a key may call, in the order it lists them."""
+
+
+def is_key_callable(value: str) -> typing.TypeIs[KeyCallableAction]:
+    """Tell whether an action is one the contract says a key may call."""
+    return value in KEY_CALLABLE
+
+
 __all__ = [
     "Action",
     "ActionDelete",
@@ -9307,6 +9364,7 @@ __all__ = [
     "ActionRepin",
     "ActionRestore",
     "ActionRevoke",
+    "ActionRewind",
     "ActionWithdraw",
     "Active",
     "Address",
@@ -9471,8 +9529,11 @@ __all__ = [
     "Item",
     "JobEnvelope",
     "Jump",
+    "KEY_CALLABLE",
     "KINDS",
     "Kept",
+    "KeyCallable",
+    "KeyCallableAction",
     "KeyListing",
     "KeyPurpose",
     "KeySource",
@@ -9886,5 +9947,6 @@ __all__ = [
     "WizardReport",
     "WizardStep",
     "WordEnvelope",
+    "is_key_callable",
     "is_refusal_code",
 ]

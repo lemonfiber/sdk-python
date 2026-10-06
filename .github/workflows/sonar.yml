@@ -22,17 +22,24 @@ permissions:
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: true
+# The token never shares a runner with code the repository installs. `coverage`
+# installs every locked dependency and runs the suite, and a step on the same
+# runner can rewrite what a later step runs — the tool cache, a downloaded
+# action, `PATH` through `$GITHUB_PATH` — so it holds no secret and hands on only
+# its report. `sonar` checks the tree out, reads that report and runs the
+# scanner, and runs nothing from the repository. Only `sonar` and the gate are
+# given `SONAR_TOKEN`, which is why a Dependabot run may be given it too.
+# The report is read as data and nothing else: it lands outside the workspace,
+# is refused unless it is the one regular file expected, and reaches the scanner
+# as an argument, so it can overwrite nothing the scanner reads and is never run.
 jobs:
-  sonar:
+  coverage:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      # Whole history, so the scanner can tell which lines a pull request changed
-      # and blame each one.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          fetch-depth: 0
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       - name: Install exactly what the lockfile says
         run: uv sync --locked --no-build
@@ -40,20 +47,84 @@ jobs:
       # reports is the coverage the gate held to 100%.
       - name: The suite, with 100% line and branch coverage
         run: uv run --locked --no-build just coverage
-      # A Dependabot run reads secrets from the Dependabot store, and `SONAR_TOKEN`
-      # is only in the Actions store, so the scan is skipped there rather than
-      # failing on an empty token. The suite above needs no token and runs either
-      # way.
-      #
-      # Keyed on who opened the pull request, which is what selects the secret
-      # store, and not on `github.triggering_actor`, which becomes whoever pressed
-      # re-run. A push to main carries no pull request, so the scan runs there.
+      # The report names its source roots by absolute path, which is the same path
+      # in the scan job's checkout: both run in this repository's workspace.
+      - name: Hand the report to the scan
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage
+          path: coverage.xml
+          retention-days: 1
+          if-no-files-found: error
+
+  sonar:
+    needs: coverage
+    # Runs whatever coverage did, and fails at once when it failed: a skipped job
+    # reports as passing, so `sonar` would read green over a suite that did not
+    # reach 100%. `!cancelled()` rather than `always()`, because a cancelled run is
+    # somebody pressing stop.
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: The coverage gate held
+        env:
+          RESULT: ${{ needs.coverage.result }}
+        run: |
+          if [ "$RESULT" != "success" ]; then
+            echo "::error::The coverage job finished with ${RESULT}, so there is no report to scan."
+            exit 1
+          fi
+      # Whole history, so the scanner can tell which lines a pull request changed
+      # and blame each one.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      # Into the runner's temporary directory, never the workspace: the artifact
+      # comes from the job that ran the repository's code.
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: coverage
+          path: ${{ runner.temp }}/coverage
+      # What was found is reduced to one line of plain characters before it is
+      # printed, so a file name cannot read as a workflow command.
+      - name: The report is the one file expected
+        env:
+          DIR: ${{ runner.temp }}/coverage
+          EXPECTED: coverage.xml
+        run: |
+          set -euo pipefail
+          found=$(find "$DIR" -mindepth 1 -printf '%P:%y,' | tr -c 'A-Za-z0-9._:,/-' '?')
+          if [ "$found" != "${EXPECTED}:f," ]; then
+            echo "::error::The coverage artifact has to hold ${EXPECTED} as a regular file and nothing else. It held (name:type, f file, l link, d directory): ${found:-nothing}"
+            exit 1
+          fi
+      # A pull request from a fork reads no secret store, and a Dependabot run
+      # reads the Dependabot one, so a pull request can arrive without a token.
+      - name: Whether a token reached this run
+        id: token
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          if [ -n "${SONAR_TOKEN:-}" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+      # A pull request without a token skips the scan rather than failing on an
+      # empty one. A push to main scans whatever it was given, so a missing token
+      # there fails here, where it is named, and main's analysis is what every pull
+      # request is measured against.
       - name: SonarQube Cloud scan
         id: scan
-        if: github.event_name != 'pull_request' || github.event.pull_request.user.login != 'dependabot[bot]'
+        if: github.event_name != 'pull_request' || steps.token.outputs.present == 'true'
         uses: SonarSource/sonarqube-scan-action@d209202bc7d53ff1cc128f7f907dac145c9d6ae9 # v8.3.0
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        # The report's path is given here rather than in `sonar-project.properties`.
+        with:
+          args: -Dsonar.python.coverage.reportPaths=${{ runner.temp }}/coverage/coverage.xml
       # Runs when the scan failed, and says whether the host was answering: a
       # scanner that cannot reach SonarCloud fails with a trace that reads like a
       # finding. It changes nothing about the run; the scan still failed and the
@@ -68,7 +139,7 @@ jobs:
           # 000 is curl reaching nothing at all, which is the same news as a 5xx.
           case "$code" in
           5?? | 000)
-            said="The scan failed and SonarCloud answered ${code} to a plain status request, so the host was unavailable rather than this pull request being at fault. The suite ran above and had to reach 100% coverage either way. Re-run this job once sonarcloud.io is answering — no analysis gated this run."
+            said="The scan failed and SonarCloud answered ${code} to a plain status request, so the host was unavailable rather than this pull request being at fault. The suite ran in its own job and had to reach 100% coverage either way. Re-run this job once sonarcloud.io is answering — no analysis gated this run."
             ;;
           *)
             said="The scan failed and SonarCloud answered ${code} to a plain status request, so the host was reachable and the failure is in this run rather than an outage. Read the scanner output above. No analysis gated this run."
@@ -80,12 +151,12 @@ jobs:
       # A skipped step is missing from the log, which reads the same as one that
       # ran and found nothing, so the skip is said under its own name.
       - name: Why the scan was skipped
-        if: github.event_name == 'pull_request' && github.event.pull_request.user.login == 'dependabot[bot]'
+        if: github.event_name == 'pull_request' && steps.token.outputs.present != 'true'
         env:
           AUTHOR: ${{ github.event.pull_request.user.login }}
         run: |
           set -euo pipefail
-          said="The SonarCloud scan was skipped: ${AUTHOR} opened this pull request, and a Dependabot run reads secrets from the Dependabot store rather than the Actions store, so SONAR_TOKEN is empty here and the scanner could only fail on it. The suite ran above and still had to reach 100% coverage. No analysis was produced, so none gated this run."
+          said="The SonarCloud scan was skipped: no SONAR_TOKEN reached this run of a pull request opened by ${AUTHOR}. A pull request from a fork reads no secret store, and a Dependabot run reads the Dependabot one. The suite ran in its own job and still had to reach 100% coverage. No analysis was produced, so none gated this run."
           echo "::notice::${said}"
           printf '### SonarCloud scan skipped\n\n%s\n' "$said" >> "$GITHUB_STEP_SUMMARY"
 

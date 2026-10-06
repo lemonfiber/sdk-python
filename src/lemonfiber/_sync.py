@@ -25,6 +25,7 @@ if TYPE_CHECKING:
 
     from lemonfiber._generated.contract import Envelope, JobEnvelope
     from lemonfiber.address import Address, Route
+    from lemonfiber.capabilities import CapabilitySet
     from lemonfiber.credential import Credential
     from lemonfiber.jobs import JobStanding
     from lemonfiber.reads import Read
@@ -154,6 +155,10 @@ class SyncClient:
     def read(self, read: Read, query: _wire.Query | None = None) -> Envelope:
         """Ask for what a command prints under `--json`."""
         return _wire.envelope_of(self._answer(_wire.read_call(read, query)))
+
+    def capabilities(self) -> CapabilitySet:
+        """Ask what the stack can do, for the credential this client holds, as it stands now."""
+        return _wire.capabilities_of(self._answer(_wire.capabilities_call()))
 
     def logs(self, query: _wire.Query | None = None) -> list[Envelope]:
         """Ask for what the services have been saying, a `log` envelope a line."""
