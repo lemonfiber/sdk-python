@@ -522,3 +522,44 @@ def test_the_read_list_here_matches_its_own_reading() -> None:
     assert twice == []
     assert "/api/status" in paths
     assert "/api/logs" in paths
+
+
+def comparing_as(
+    monkeypatch: pytest.MonkeyPatch,
+    root: pathlib.Path,
+    found: list[str],
+) -> list[tuple[pathlib.Path, pathlib.Path]]:
+    """Make the comparison answer with this, and run its command line against `root`."""
+    asked: list[tuple[pathlib.Path, pathlib.Path]] = []
+
+    def comparing(spec: pathlib.Path, repo: pathlib.Path) -> tuple[list[str], int]:
+        asked.append((spec, repo))
+        return found, 3
+
+    monkeypatch.setattr(the_doors_this_client_names, "problems", comparing)
+    monkeypatch.setattr(sys, "argv", ["doors", "--spec", str(root / "s"), "--repo", str(root)])
+    return asked
+
+
+def test_the_read_comparison_says_how_many_reads_agree(
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    asked = comparing_as(monkeypatch, tmp_path, [])
+    assert the_doors_this_client_names.main() == 0
+    assert asked == [(tmp_path / "s", tmp_path)]
+    assert (
+        capsys.readouterr().out
+        == "this client holds a path for each of the 3 reads the contract page names\n"
+    )
+
+
+def test_the_read_comparison_names_each_disagreement(
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    comparing_as(monkeypatch, tmp_path, ["a read is missing", "a path is unnamed"])
+    assert the_doors_this_client_names.main() == 1
+    assert capsys.readouterr().err == "::error::a read is missing\n::error::a path is unnamed\n"
