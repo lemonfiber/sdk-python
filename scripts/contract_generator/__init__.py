@@ -23,7 +23,7 @@ from scripts.contract_generator.artefact import (
     refusals_of,
     users_of,
 )
-from scripts.contract_generator.formatting import Formatter, line_cap, lines_in
+from scripts.contract_generator.formatting import Formatter
 from scripts.contract_generator.layout import Layout
 from scripts.contract_generator.modules import OUT, Module, index
 from scripts.contract_generator.refused import ArtefactRefusedError, refuse
@@ -38,6 +38,7 @@ from scripts.contract_generator.tables import (
 )
 from scripts.contract_generator.writer import Writer
 from scripts.contract_sync import ROOT
+from scripts.line_cap import LineCapError, line_cap, lines_in
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -55,7 +56,10 @@ def generate(
 
     `cap` is the most lines a module may hold, `pyproject.toml`'s where none is given.
     """
-    limit = line_cap(ROOT) if cap is None else cap
+    try:
+        limit = line_cap(ROOT, "source") if cap is None else cap
+    except LineCapError as undeclared:
+        refuse(str(undeclared))
     checked(artefact, stamp)
     kinds = kinds_of(artefact)
     refusals = refusals_of(artefact)

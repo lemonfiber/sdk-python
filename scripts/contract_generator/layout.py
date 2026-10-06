@@ -9,12 +9,12 @@ name one another, and each part importing only from parts before it.
 
 from typing import TYPE_CHECKING
 
-from scripts.contract_generator.formatting import lines_in
 from scripts.contract_generator.modules import Module, index
 from scripts.contract_generator.refused import refuse
 from scripts.contract_generator.shapes import declarations
 from scripts.contract_generator.spelling import module_name
 from scripts.contract_generator.tables import KINDS_PACKAGE, SHARED_PACKAGE
+from scripts.line_cap import lines_in
 
 if TYPE_CHECKING:
     from collections.abc import Collection, Mapping
