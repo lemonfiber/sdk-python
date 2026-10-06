@@ -5,10 +5,11 @@
 # meets it yet. The release gate and the no-stubs gate read this file; a pull
 # request that changes whether a requirement is met changes its row.
 #
-# These are the client's requirements of the web API contract. Where a requirement
-# also binds the server or the artefact the core publishes (the heartbeat, event
-# ids, publishing the artefact, listing refusal codes), this client's half is here
-# and the row is partial.
+# These are the client's requirements of the web API contract, and of the error
+# model a client follows. Where a requirement also binds the server, the artefact
+# the core publishes or every other surface (the heartbeat, event ids, publishing
+# the artefact, listing refusal codes, asking again after a passing failure), this
+# client's half is here and the row is partial.
 
 requirement = [
   { id = "ARCH-R51", state = "done", evidence = ["src/lemonfiber/stream.py", "tests/test_following.py::test_a_break_names_how_long_it_was_quiet_and_cools_everything_held"] },
@@ -32,4 +33,5 @@ requirement = [
   { id = "ARCH-R138", state = "partial", evidence = ["src/lemonfiber/problems.py", "tests/test_clients.py::test_a_refusal_is_read_by_its_status_carrying_its_code_and_sentence"] },
   { id = "ARCH-R139", state = "partial", evidence = ["scripts/contract_generator/refused.py", "tests/test_generator.py::test_listed_refusals_are_generated_with_what_the_contract_says_of_each"] },
   { id = "ARCH-R170", state = "done", evidence = ["scripts/contract_generator/writer.py", "tests/test_generator.py::test_a_reference_to_no_definition_is_refused_naming_it_and_where_it_sits_and_nothing_is_written"] },
+  { id = "G4-R15", state = "partial", evidence = ["src/lemonfiber/_protocol/retry.py", "tests/test_asked_again.py::test_a_read_is_asked_again_twice_after_passing_failures_waiting_twice_as_long_the_second_time", "tests/test_asked_again.py::test_what_changes_something_is_never_asked_again"] },
 ]
