@@ -36,7 +36,8 @@ others. A client that disagrees with the contract is wrong.
   a certificate pin vouches for** (`ARCH-R60`, `ARCH-R99`). A pin is given when a
   client is built, and there is no argument or setting that weakens it.
 - **Comments and docstrings state what a thing is or does.** Reasoning and
-  history belong in the spec.
+  history belong in the spec, and a requirement identifier in the commit; the
+  architecture tests refuse either in a comment or docstring.
 
 ## Checks
 
