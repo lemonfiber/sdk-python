@@ -25,9 +25,9 @@ from lemonfiber import (
     Read,
     SyncClient,
     UnreachableError,
-    _wire,
     admit_async,
 )
+from lemonfiber._protocol import calls
 from tests.conftest import PRINTED
 from tests.drivers import admitted, connect, opened_session
 from tests.stack import Reply, envelope
@@ -477,7 +477,7 @@ def test_a_failure_carries_nothing_of_the_request_that_met_it(
 
 
 def test_a_call_shows_nothing_of_its_credential() -> None:
-    call = _wire.with_credential(_wire.read_call(Read.STATUS, None), Credential(PRINTED))
+    call = calls.with_credential(calls.read_call(Read.STATUS, None), Credential(PRINTED))
     assert PRINTED not in repr(call)
     assert PRINTED not in str(call)
 

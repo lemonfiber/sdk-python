@@ -2,11 +2,12 @@
 """What a follower knows between openings, on a clock the test turns."""
 
 import json
+from http import HTTPMethod
 
 import pytest
 
 from lemonfiber import Break, Credential, Gap, Live, Stale, StreamLostError, Unrecognised, read_envelope
-from lemonfiber._wire import Call
+from lemonfiber._protocol.calls import Call
 from lemonfiber.stream import LONGEST_WAIT, Following
 
 
@@ -40,7 +41,7 @@ def follower(clock: Clock, *, reconnects: int = 3, first_wait: float = 1.0) -> F
 
 def test_the_opening_call_asks_for_the_stream_with_the_credential() -> None:
     assert follower(Clock()).call() == Call(
-        "GET",
+        HTTPMethod.GET,
         "/api/events",
         {"Accept": "text/event-stream", "X-Lemonfiber-Token": "abc"},
     )
