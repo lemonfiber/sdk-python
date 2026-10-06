@@ -74,8 +74,10 @@ an envelope to the kind you expect, and raises `UnexpectedKindError` for any
 other. Every shape the contract describes is importable from
 `lemonfiber.contract`.
 
-Two reads are not a single envelope: `logs` answers with a list of envelopes,
-one per line, and `bundle` answers with a support bundle's bytes.
+Two reads are not a single envelope. `logs` takes the `services` and `forms` to
+narrow to and how many of the latest lines to answer with (`tail`), and answers
+with a `LogEnvelope` a line, refusing a line of any other kind. `bundle` answers
+with a `BundleFile`: a support bundle's name, bytes and type.
 
 ## What a stack can do
 

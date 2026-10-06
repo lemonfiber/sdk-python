@@ -106,6 +106,8 @@ minimum-score = 90
 accepted = [
   { symbol = "lemonfiber.Admitted", kind = "object-removed", reason = "named `Session`, apart from the contract's `Admitted` shape" },
   { symbol = "lemonfiber.Bundle", kind = "object-removed", reason = "named `BundleFile`, apart from the contract's `Bundle` shape" },
+  { symbol = "lemonfiber._aio.AsyncClient.logs(query)", kind = "parameter-removed", reason = "the logs are asked for by `services`, `forms` and `tail`" },
+  { symbol = "lemonfiber._sync.SyncClient.logs(query)", kind = "parameter-removed", reason = "the logs are asked for by `services`, `forms` and `tail`" },
 ]
 
 [tool.lemonfiber.line-cap]

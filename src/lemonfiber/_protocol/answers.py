@@ -15,7 +15,7 @@ from lemonfiber.jobs import Ended, Finished, JobStanding, Running
 from lemonfiber.problems import NoSuchJobError, PasswordRefusedError, UnreadableResponseError
 
 if TYPE_CHECKING:
-    from lemonfiber._generated import CapabilityState, Envelope
+    from lemonfiber._generated import CapabilityState, Envelope, LogEnvelope
     from lemonfiber._protocol.calls import Answer
 
 REFUSED_AT_THE_DOOR: Final = "That is not the password, or none is configured."
@@ -39,6 +39,11 @@ def envelopes_of(answer: Answer) -> list[Envelope]:
     if not succeeded(answer):
         raise refusal_of(answer)
     return [parse_envelope(line) for line in answer.body.splitlines() if line.strip()]
+
+
+def log_lines_of(answer: Answer) -> list[LogEnvelope]:
+    """Read an answer of one `log` envelope a line, refusing a line of another kind, or raise the refusal it is."""
+    return [expect(envelope, "log") for envelope in envelopes_of(answer)]
 
 
 def bundle_of(name: str, answer: Answer) -> BundleFile:

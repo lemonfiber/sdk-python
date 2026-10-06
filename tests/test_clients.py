@@ -29,6 +29,7 @@ from lemonfiber import (
     Running,
     StillRunningError,
     TooManyAttemptsError,
+    UnexpectedKindError,
     UnreachableError,
     UnreadableResponseError,
     admit,
@@ -283,9 +284,26 @@ def test_capabilities_refused_are_a_refusal(client: Driver, stack: Stack) -> Non
 def test_the_logs_are_an_envelope_a_line(client: Driver, stack: Stack) -> None:
     lines = '{"api_version":1,"kind":"log","data":{"line":"a"}}\n\n{"api_version":1,"kind":"log","data":{"line":"b"}}\n'
     stack.reply("GET", "/api/logs", Reply(body=lines))
-    read = client.logs({"service": "sonarr", "lines": 2})
+    read = client.logs(services=["sonarr", "radarr"], forms=["tv"], tail=2)
     assert [entry["data"] for entry in read] == [{"line": "a"}, {"line": "b"}]
-    assert stack.arrived[0].query == [("service", "sonarr"), ("lines", "2")]
+    assert stack.arrived[0].query == [
+        ("service", "sonarr"),
+        ("service", "radarr"),
+        ("form", "tv"),
+        ("tail", "2"),
+    ]
+
+
+def test_the_logs_asked_for_whole_name_nothing(client: Driver, stack: Stack) -> None:
+    stack.reply("GET", "/api/logs", Reply(body=""))
+    assert client.logs() == []
+    assert stack.arrived[0].query == []
+
+
+def test_a_logs_line_of_another_kind_is_refused(client: Driver, stack: Stack) -> None:
+    stack.reply("GET", "/api/logs", Reply(body='{"api_version":1,"kind":"status","data":{}}\n'))
+    with pytest.raises(UnexpectedKindError):
+        client.logs()
 
 
 def test_the_logs_refused_are_a_refusal(client: Driver, stack: Stack) -> None:
