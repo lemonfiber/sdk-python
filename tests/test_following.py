@@ -8,7 +8,7 @@ import pytest
 
 from lemonfiber import Break, Credential, Gap, Live, Stale, StreamLostError, Unrecognised, read_envelope
 from lemonfiber._protocol.calls import Call
-from lemonfiber.stream import LONGEST_WAIT, Following
+from lemonfiber.stream import LONGEST_WAIT, SILENCE_ALLOWED, Following
 
 
 class Clock:
@@ -34,9 +34,21 @@ STATUS = read_envelope({"api_version": 1, "kind": "status", "data": {"a": 1}})
 NEWS = read_envelope({"api_version": 1, "kind": "news", "data": {"b": 2}})
 
 
-def follower(clock: Clock, *, reconnects: int = 3, first_wait: float = 1.0) -> Following:
+def follower(
+    clock: Clock,
+    *,
+    silence: float = 30.0,
+    reconnects: int = 3,
+    first_wait: float = 1.0,
+) -> Following:
     """Return a follower on the test's clock."""
-    return Following(Credential("abc"), reconnects=reconnects, first_wait=first_wait, clock=clock)
+    return Following(
+        Credential("abc"),
+        silence=silence,
+        reconnects=reconnects,
+        first_wait=first_wait,
+        clock=clock,
+    )
 
 
 def test_the_opening_call_asks_for_the_stream_with_the_credential() -> None:
@@ -88,10 +100,24 @@ def test_an_opening_is_quiet_from_the_moment_it_opened() -> None:
     assert following.broke(Break.DROPPED) == [Gap(Break.DROPPED, 1.0)]
 
 
+def test_a_follower_that_never_opened_is_quiet_from_the_moment_it_began() -> None:
+    clock = Clock()
+    following = follower(clock)
+    clock.now += 2
+    assert following.broke(Break.DROPPED) == [Gap(Break.DROPPED, 2.0)]
+
+
 def test_a_kind_this_package_does_not_know_is_named_and_not_held() -> None:
     following = follower(Clock())
     assert following.heard(frame("later", {})) == [Unrecognised("later")]
     assert following.held() == {}
+
+
+def test_what_follows_an_unknown_kind_in_the_same_chunk_still_arrives() -> None:
+    following = follower(Clock())
+    arrived = following.heard(frame("later", {}) + frame("news", NEWS["data"]))
+    assert arrived == [Unrecognised("later"), Live(NEWS)]
+    assert following.held() == {"news": Live(NEWS)}
 
 
 def test_each_failed_opening_doubles_the_wait_up_to_the_longest_and_then_the_stream_is_lost() -> None:
@@ -118,5 +144,5 @@ def test_anything_heard_starts_the_count_of_failures_again() -> None:
 
 
 def test_a_follower_says_how_long_silence_may_last() -> None:
-    assert Following(Credential("abc"), silence=4.5).silence == 4.5
-    assert Following(Credential("abc")).silence == 30.0
+    assert follower(Clock(), silence=4.5).silence == 4.5
+    assert Following(Credential("abc")).silence == SILENCE_ALLOWED

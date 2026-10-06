@@ -83,3 +83,36 @@ def test_a_long_line_arriving_in_small_chunks_is_read_in_time_proportional_to_it
     many = parser.push(b"data: 1\n\n" * 20000)
     assert len(many) == 20000
     assert time.monotonic() - started < 2.0
+
+
+def test_a_sequence_that_is_not_utf8_arrives_as_the_replacement_character() -> None:
+    assert Parser().push(b"data: a\xffb\n\n") == [Event(None, "message", "a�b")]
+
+
+def test_a_carriage_return_at_the_end_of_a_chunk_ends_its_line_once_more_arrives() -> None:
+    parser = Parser()
+    assert parser.push(b"data: a\n\r") == []
+    assert parser.push(b"x") == [Event(None, "message", "a")]
+
+
+def test_a_line_ended_by_a_carriage_return_alone_is_read_at_once() -> None:
+    assert Parser().push(b"data: a\r\rx") == [Event(None, "message", "a")]
+
+
+def test_a_carriage_return_and_line_feed_split_across_chunks_end_one_line() -> None:
+    parser = Parser()
+    assert parser.push(b"data: a\r") == []
+    assert parser.push(b"\n") == []
+    assert parser.push(b"data: b\n\n") == [Event(None, "message", "a\nb")]
+
+
+def test_a_carriage_return_held_counts_toward_the_longest_line() -> None:
+    parser = Parser(largest=9)
+    with pytest.raises(UnreadableResponseError):
+        parser.push(b"data: 123\r")
+
+
+def test_data_one_character_past_what_an_event_may_be_is_refused() -> None:
+    parser = Parser(largest=10)
+    with pytest.raises(UnreadableResponseError):
+        parser.push(b"data: 12345\ndata: 12345\n")
