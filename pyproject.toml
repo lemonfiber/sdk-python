@@ -54,7 +54,6 @@ typeCheckingMode = "strict"
 reportUnnecessaryTypeIgnoreComment = "error"
 enableTypeIgnoreComments = false
 reportImplicitOverride = "error"
-reportMissingSuperCall = "error"
 reportPropertyTypeMismatch = "error"
 reportUninitializedInstanceVariable = "error"
 

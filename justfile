@@ -58,6 +58,10 @@ mutation:
     uv run mutmut export-cicd-stats
     uv run python scripts/mutation_score.py
 
+# Every read the contract page names, against the paths this client holds. Needs a spec checkout.
+doors spec="../spec":
+    uv run python scripts/the_doors_this_client_names.py --spec {{spec}}
+
 # The public surface against every commit a consumer vendors. Needs a spec checkout.
 bc spec="../spec":
     uv run python scripts/backward_compat.py --spec {{spec}}
