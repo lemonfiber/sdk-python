@@ -10,7 +10,7 @@ from lemonfiber import AsyncClient, SyncClient, admit, admit_async
 from lemonfiber.address import ENCRYPTED
 
 if TYPE_CHECKING:
-    from collections.abc import Coroutine, Mapping
+    from collections.abc import Coroutine, Mapping, Sequence
 
     from lemonfiber import (
         Address,
@@ -28,7 +28,7 @@ if TYPE_CHECKING:
     )
     from lemonfiber._aio import AsyncStream
     from lemonfiber._sync import SyncStream
-    from lemonfiber.contract import JobEnvelope
+    from lemonfiber.contract import JobEnvelope, LogEnvelope
     from lemonfiber.stream import Arrival, Live, Stale
 
 SETTLE = 0.25
@@ -110,7 +110,13 @@ class Driver(Protocol):
         """Ask what the stack can do."""
         ...
 
-    def logs(self, query: Query | None = None) -> list[Envelope]:
+    def logs(
+        self,
+        *,
+        services: Sequence[str] = (),
+        forms: Sequence[str] = (),
+        tail: int | None = None,
+    ) -> list[LogEnvelope]:
         """Read the logs."""
         ...
 
@@ -166,9 +172,15 @@ class SyncDriver:
         """Ask what the stack can do."""
         return self.client.capabilities()
 
-    def logs(self, query: Query | None = None) -> list[Envelope]:
+    def logs(
+        self,
+        *,
+        services: Sequence[str] = (),
+        forms: Sequence[str] = (),
+        tail: int | None = None,
+    ) -> list[LogEnvelope]:
         """Read the logs."""
-        return self.client.logs(query)
+        return self.client.logs(services=services, forms=forms, tail=tail)
 
     def bundle(self, name: str) -> BundleFile:
         """Fetch a bundle."""
@@ -235,9 +247,15 @@ class AsyncDriver:
         """Ask what the stack can do."""
         return self.run(self.client.capabilities())
 
-    def logs(self, query: Query | None = None) -> list[Envelope]:
+    def logs(
+        self,
+        *,
+        services: Sequence[str] = (),
+        forms: Sequence[str] = (),
+        tail: int | None = None,
+    ) -> list[LogEnvelope]:
         """Read the logs."""
-        return self.run(self.client.logs(query))
+        return self.run(self.client.logs(services=services, forms=forms, tail=tail))
 
     def bundle(self, name: str) -> BundleFile:
         """Fetch a bundle."""

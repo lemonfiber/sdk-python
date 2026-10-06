@@ -25,7 +25,7 @@ def test_each_call_is_the_request_it_names() -> None:
         "/api/front-door?a=1",
         JSON,
     )
-    assert calls.logs_call({"service": "x"}) == calls.Call(HTTPMethod.GET, "/api/logs?service=x", JSON)
+    assert calls.logs_call(["x"], [], None) == calls.Call(HTTPMethod.GET, "/api/logs?service=x", JSON)
     assert calls.bundle_call("a/b c") == calls.Call(
         HTTPMethod.GET,
         "/api/bundle/a%2Fb%20c",
@@ -50,7 +50,7 @@ def test_each_call_is_the_request_it_names() -> None:
 def test_each_operation_pairs_its_call_with_the_reading_of_its_answer() -> None:
     assert operation.reading(Read.STATUS, None).call == calls.read_call(Read.STATUS, None)
     assert operation.capabilities().call == calls.capabilities_call()
-    assert operation.logs(None).call == calls.logs_call(None)
+    assert operation.logs(["x"], ["tv"], 3).call == calls.logs_call(["x"], ["tv"], 3)
     assert operation.bundle("b").call == calls.bundle_call("b")
     assert operation.action("restart", None).call == calls.action_call("restart", None)
     assert operation.job("j").call == calls.job_call("j", HTTPMethod.GET)

@@ -9,7 +9,7 @@ from lemonfiber._protocol.answers import (
     bundle_of,
     capabilities_of,
     envelope_of,
-    envelopes_of,
+    log_lines_of,
     session_of,
     standing_of,
 )
@@ -26,9 +26,9 @@ from lemonfiber._protocol.calls import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping
+    from collections.abc import Callable, Mapping, Sequence
 
-    from lemonfiber._generated import Envelope
+    from lemonfiber._generated import Envelope, LogEnvelope
     from lemonfiber._protocol.calls import Json, Query
     from lemonfiber.capabilities import CapabilitySet
     from lemonfiber.credential import Session
@@ -55,9 +55,9 @@ def capabilities() -> Operation[CapabilitySet]:
     return Operation(capabilities_call(), capabilities_of)
 
 
-def logs(query: Query | None) -> Operation[list[Envelope]]:
+def logs(services: Sequence[str], forms: Sequence[str], tail: int | None) -> Operation[list[LogEnvelope]]:
     """Ask for what the services have been saying, a `log` envelope a line."""
-    return Operation(logs_call(query), envelopes_of)
+    return Operation(logs_call(services, forms, tail), log_lines_of)
 
 
 def bundle(name: str) -> Operation[BundleFile]:

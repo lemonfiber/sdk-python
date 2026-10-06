@@ -30,10 +30,10 @@ from lemonfiber.problems import (
 from lemonfiber.stream import FIRST_WAIT, OPENED, RECONNECTS_ALLOWED, SILENCE_ALLOWED, Break, Following
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator, AsyncIterator, Callable, Mapping
+    from collections.abc import AsyncGenerator, AsyncIterator, Callable, Mapping, Sequence
     from types import TracebackType
 
-    from lemonfiber._generated import Envelope, JobEnvelope
+    from lemonfiber._generated import Envelope, JobEnvelope, LogEnvelope
     from lemonfiber._protocol.calls import Json, Query
     from lemonfiber.address import Address, Route
     from lemonfiber.capabilities import CapabilitySet
@@ -199,9 +199,20 @@ class AsyncClient:
         """Ask what the stack can do, for the credential this client holds, as it stands now."""
         return await self._run(operation.capabilities())
 
-    async def logs(self, query: Query | None = None) -> list[Envelope]:
-        """Ask for what the services have been saying, a `log` envelope a line."""
-        return await self._run(operation.logs(query))
+    async def logs(
+        self,
+        *,
+        services: Sequence[str] = (),
+        forms: Sequence[str] = (),
+        tail: int | None = None,
+    ) -> list[LogEnvelope]:
+        """Ask for what the services have been saying, a `log` envelope a line.
+
+        `services` and `forms` narrow to those named; `tail` is how many of the
+        latest lines to answer with. Each left out is left to lemonfiber, as the
+        command leaves a flag it was not given.
+        """
+        return await self._run(operation.logs(services, forms, tail))
 
     async def bundle(self, name: str) -> BundleFile:
         """Fetch one support bundle this run wrote, by name, as the bytes it is."""
