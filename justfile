@@ -34,9 +34,10 @@ types:
 test *args:
     uv run pytest {{args}}
 
-# The suite with 100% line and branch coverage required.
+# The suite with 100% line and branch coverage required, and the report the
+# SonarQube Cloud scan reads written to `coverage.xml`.
 coverage:
-    uv run pytest --cov --cov-report=term-missing
+    uv run pytest --cov --cov-report=term-missing --cov-report=xml
 
 # Rewrite `src/lemonfiber/_generated/` from the vendored contract.
 generate:
