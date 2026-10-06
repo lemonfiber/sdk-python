@@ -18,6 +18,7 @@ from lemonfiber._protocol import operation
 from lemonfiber._protocol.calls import DEFAULT_TIMEOUT, Answer, Call, with_credential
 from lemonfiber._protocol.following import DEFAULT_EVERY, job_name, next_wait
 from lemonfiber._protocol.refusals import CERTIFICATE_REFUSED, NOT_ANSWERING, opening_refusal
+from lemonfiber._protocol.retry import Attempts
 from lemonfiber.jobs import Ended, Finished, Running
 from lemonfiber.problems import CertificateRefusedError, LemonfiberError, UnreachableError
 from lemonfiber.stream import FIRST_WAIT, OPENED, RECONNECTS_ALLOWED, SILENCE_ALLOWED, Break, Following
@@ -83,8 +84,8 @@ def ways_to(address: Address, timeout: float) -> list[Way]:
     return [(route, pool_for(address, route, timeout)) for route in address.routes]
 
 
-def attempt(way: Way, prefix: str, call: Call) -> Answer | None:
-    """Send one call over one route, or return nothing where no connection could be made there.
+def attempt(way: Way, prefix: str, call: Call, limit: float) -> Answer | None:
+    """Send one call over one route, waiting at most `limit` seconds, or return nothing where no connection could be made there.
 
     A failure is raised once urllib3's error is let go, so nothing of the
     request, its credential included, rides along as the failure's cause.
@@ -97,6 +98,7 @@ def attempt(way: Way, prefix: str, call: Call) -> Answer | None:
             body=call.body,
             headers={**call.headers, **route.headers()},
             retries=False,
+            timeout=urllib3.Timeout(total=limit),
         )
     except urllib3.exceptions.SSLError:
         failure: LemonfiberError = CertificateRefusedError(CERTIFICATE_REFUSED)
@@ -110,17 +112,38 @@ def attempt(way: Way, prefix: str, call: Call) -> Answer | None:
     raise failure
 
 
-def exchange(ways: Sequence[Way], prefix: str, call: Call) -> Answer:
+def exchange(ways: Sequence[Way], prefix: str, call: Call, limit: float) -> Answer:
     """Send one call over the first route a connection can be made on, following no redirect.
 
     A route is passed over only where no connection could be made, so nothing
     was sent; once a connection is made, its outcome is the call's.
     """
     for way in ways:
-        answer = attempt(way, prefix, call)
+        answer = attempt(way, prefix, call, limit)
         if answer is not None:
             return answer
     raise UnreachableError(NOT_ANSWERING)
+
+
+def asked(ways: Sequence[Way], prefix: str, call: Call, attempts: Attempts) -> Answer:
+    """Send a call, and send a read again after a passing failure, as `attempts` allows.
+
+    The last attempt's outcome is the call's: its answer, or the failure that
+    nothing answered.
+    """
+    while True:
+        outcome: Answer | UnreachableError
+        try:
+            outcome = exchange(ways, prefix, call, attempts.left(time.monotonic()))
+        except UnreachableError as unanswered:
+            outcome = unanswered
+        pause = attempts.pause(outcome if isinstance(outcome, Answer) else None, time.monotonic())
+        if pause is None:
+            break
+        time.sleep(pause)
+    if isinstance(outcome, UnreachableError):
+        raise outcome
+    return outcome
 
 
 def close_all(ways: Sequence[Way]) -> None:
@@ -147,6 +170,7 @@ class SyncClient:
         """Hold an address and a credential; nothing is sent until a call is made."""
         self._address = address
         self._credential = credential
+        self._timeout = timeout
         self._ways = ways_to(address, timeout)
 
     @property
@@ -154,11 +178,10 @@ class SyncClient:
         """Return where this client sends, and the pin it holds that address to."""
         return self._address
 
-    def _answer(self, call: Call) -> Answer:
-        return exchange(self._ways, self._address.prefix, with_credential(call, self._credential))
-
-    def _run[T](self, asked: operation.Operation[T]) -> T:
-        return asked.read(self._answer(asked.call))
+    def _run[T](self, operated: operation.Operation[T]) -> T:
+        call = with_credential(operated.call, self._credential)
+        attempts = Attempts(operated.again, self._timeout, time.monotonic())
+        return operated.read(asked(self._ways, self._address.prefix, call, attempts))
 
     def read(self, read: Read, query: Query | None = None) -> Envelope:
         """Ask for what a command prints under `--json`."""
@@ -384,9 +407,9 @@ def admit(
     A household member gives their `name`; the operator gives none. The session's
     credential is what a `SyncClient` is then built with.
     """
-    asked = operation.admission(password, name)
+    offered = operation.admission(password, name)
     ways = ways_to(address, timeout)
     try:
-        return asked.read(exchange(ways, address.prefix, asked.call))
+        return offered.read(exchange(ways, address.prefix, offered.call, timeout))
     finally:
         close_all(ways)

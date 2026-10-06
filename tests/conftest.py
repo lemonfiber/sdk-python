@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from lemonfiber import Address, Credential
+from lemonfiber._protocol import retry
 from tests.drivers import FLAVOURS, connect
 from tests.stack import Stack
 
@@ -15,6 +16,18 @@ if TYPE_CHECKING:
     from tests.drivers import Driver, Flavour
 
 PRINTED = "per-run-token-0123456789abcdef"
+
+DECLARED_PAUSE = retry.FIRST_PAUSE
+"""The pause before a read is asked again, as the package declares it, before any test shortens it."""
+
+QUICK_PAUSE = 0.001
+"""The pause every test waits before a read is asked again, so a retried read costs no real time."""
+
+
+@pytest.fixture(autouse=True)
+def quick_retries(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Shorten the pause before a read is asked again; how long it is declared is asserted on its own."""
+    monkeypatch.setattr(retry, "FIRST_PAUSE", QUICK_PAUSE)
 
 
 @pytest.fixture(params=FLAVOURS)

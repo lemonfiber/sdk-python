@@ -79,6 +79,11 @@ narrow to and how many of the latest lines to answer with (`tail`), and answers
 with a `LogEnvelope` a line, refusing a line of any other kind. `bundle` answers
 with a `BundleFile`: a support bundle's name, bytes and type.
 
+A read (`read`, `capabilities`, `logs`, `bundle` and `job`) is asked twice more
+where nothing answered or a gateway in front of the stack answered 502, 503 or
+504, a quarter of a second later and then half a second, every attempt within
+the client's `timeout`.
+
 ## What a stack can do
 
 `capabilities()` answers with a `CapabilitySet`: every request the stack serves,
@@ -98,7 +103,7 @@ does not have it. A path this package does not know is kept rather than refused.
 ## Acting
 
 `act` sends an action once and never retries it, because a second sending would
-be a second change. The action names and arguments are the command line's own.
+be a second change; `release` is sent once too. The action names and arguments are the command line's own.
 
 ```python
 await client.act("restart", {"services": ["sonarr"], "dry_run": True})  # says what it would do; does nothing
