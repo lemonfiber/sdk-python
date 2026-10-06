@@ -9,16 +9,21 @@ tree under `_vendor/lemonfiber/` and records the commit beside the copy, in
 Each recorded commit is loaded from this repository's history and compared with
 the working tree by griffe. A removed name, a changed signature or a narrowed
 type is a breakage and fails the check, naming the consumer it would break. A
-consumer that records no commit yet is said so and compared with nothing.
+default or a value written another way, a constant moved to another module or
+a number become the enum member equal to it, is the same value and no
+breakage. A consumer that records no commit yet is said so and compared with
+nothing.
 
     uv run python scripts/backward_compat.py --spec ../spec
 """
 
 import argparse
+import ast
 import base64
 import json
 import os
 import pathlib
+import pkgutil
 import re
 import sys
 import tomllib
@@ -39,6 +44,9 @@ RECORD = "_vendor/lemonfiber/REVISION"
 """Where a consumer records the commit it vendored, relative to wherever it vendors."""
 COMMIT = re.compile(r"^[0-9a-f]{40}$")
 TIMEOUT_SECONDS = 30
+
+type Loaded = griffe.Object | griffe.Alias
+"""A package as griffe loads it."""
 
 type Fetch = Callable[[str], object]
 """Return the decoded JSON a GitHub API path answers with, or None where there is nothing there."""
@@ -92,7 +100,46 @@ def breakages(against: str, repo: pathlib.Path) -> list[str]:
     """Return every way the working tree breaks what the commit `against` offered."""
     old = griffe.load_git(PACKAGE, ref=against, repo=repo, search_paths=["src"])
     new = griffe.load(PACKAGE, search_paths=[str(repo / "src")])
-    return [breakage.explain() for breakage in griffe.find_breaking_changes(old, new)]
+    return [
+        breakage.explain()
+        for breakage in griffe.find_breaking_changes(old, new)
+        if not same_value(breakage, old, new)
+    ]
+
+
+def same_value(breakage: griffe.Breakage, old: Loaded, new: Loaded) -> bool:
+    """Tell whether a changed default or value is the value it was, written another way."""
+    match breakage.kind:
+        case griffe.BreakageKind.PARAMETER_CHANGED_DEFAULT:
+            before = cast("griffe.Parameter", breakage.old_value).default
+            after = cast("griffe.Parameter", breakage.new_value).default
+        case griffe.BreakageKind.ATTRIBUTE_CHANGED_VALUE:
+            before = cast("str | griffe.Expr", breakage.old_value)
+            after = cast("str | griffe.Expr", breakage.new_value)
+        case _:
+            return False
+    try:
+        was = value_of(before, old)
+        now = value_of(after, new)
+    except ValueError, SyntaxError, LookupError, ImportError, AttributeError:
+        return False
+    return isinstance(now, type(was)) and now == was
+
+
+def value_of(written: str | griffe.Expr | None, package: Loaded) -> object:
+    """Return what a default or value stands for.
+
+    A literal is read as written. A name in `package` is followed to what it is
+    assigned, and any other name is imported. Anything else raises.
+    """
+    if not isinstance(written, griffe.Expr):
+        return ast.literal_eval(written or "")
+    path = written.canonical_path
+    inside = f"{package.path}."
+    if path.startswith(inside):
+        member = package[path.removeprefix(inside)]
+        return value_of(cast("str | griffe.Expr | None", member.value), package)
+    return cast("object", pkgutil.resolve_name(path))
 
 
 def run(spec: pathlib.Path, repo: pathlib.Path, fetch: Fetch = github) -> int:

@@ -10,6 +10,7 @@ import urllib.error
 import urllib.request
 from typing import TYPE_CHECKING, Self
 
+import griffe
 import pytest
 
 from scripts import (
@@ -388,6 +389,8 @@ def test_any_other_refusal_is_raised(monkeypatch: pytest.MonkeyPatch) -> None:
 class Breakage:
     """A breaking change griffe found, explained in these words."""
 
+    kind = griffe.BreakageKind.OBJECT_REMOVED
+
     def __init__(self, said: str) -> None:
         """Hold the explanation."""
         super().__init__()
@@ -423,6 +426,64 @@ def test_a_breakage_is_what_griffe_finds_between_the_pin_and_the_tree(
         (backward_compat.PACKAGE, {"ref": REVISION, "repo": tmp_path, "search_paths": ["src"]}),
         (backward_compat.PACKAGE, {"search_paths": [str(tmp_path / "src")]}),
     ]
+
+
+def surface(root: pathlib.Path, modules: dict[str, str]) -> griffe.Object | griffe.Alias:
+    """Write a package of these modules under `root` and load its surface as the check does."""
+    package = root / "surface"
+    package.mkdir(parents=True)
+    for name, text in modules.items():
+        (package / f"{name}.py").write_text(text, encoding="utf-8")
+    return griffe.load("surface", search_paths=[str(root)])
+
+
+def changes(tmp_path: pathlib.Path, before: dict[str, str], after: dict[str, str]) -> list[str]:
+    """Return the breakages the check keeps between two versions of a package."""
+    old = surface(tmp_path / "old", before)
+    new = surface(tmp_path / "new", after)
+    return [
+        breakage.explain()
+        for breakage in griffe.find_breaking_changes(old, new)
+        if not backward_compat.same_value(breakage, old, new)
+    ]
+
+
+def test_a_default_moved_to_another_module_with_its_value_is_no_breakage(tmp_path: pathlib.Path) -> None:
+    before = {
+        "__init__": "from surface import _wire\n\ndef ask(*, timeout: float = _wire.TIMEOUT) -> None: ...\n",
+        "_wire": "TIMEOUT = 30.0\n",
+    }
+    after = {
+        "__init__": "from surface._calls import TIMEOUT\n\ndef ask(*, timeout: float = TIMEOUT) -> None: ...\n",
+        "_calls": "TIMEOUT = 30.0\n",
+    }
+    assert changes(tmp_path, before, after) == []
+
+
+def test_a_number_become_the_enum_member_equal_to_it_is_no_breakage(tmp_path: pathlib.Path) -> None:
+    after = {"__init__": "from http import HTTPStatus\n\nOPENED = HTTPStatus.OK\n"}
+    assert changes(tmp_path, {"__init__": "OPENED = 200\n"}, after) == []
+
+
+@pytest.mark.parametrize(
+    ("was", "now"),
+    [
+        ("30.0", "31.0"),
+        ("200", "'200'"),
+        ("200", "frozenset()"),
+        ("200", "missing.NAME"),
+    ],
+)
+def test_a_value_that_is_not_the_one_it_was_is_a_breakage(tmp_path: pathlib.Path, was: str, now: str) -> None:
+    [found] = changes(tmp_path, {"__init__": f"VALUE = {was}\n"}, {"__init__": f"VALUE = {now}\n"})
+    assert "VALUE" in found
+
+
+def test_a_default_that_is_not_the_one_it_was_is_a_breakage(tmp_path: pathlib.Path) -> None:
+    before = {"__init__": "def ask(*, timeout: float = 30.0) -> None: ...\n"}
+    after = {"__init__": "def ask(*, timeout: float = 31.0) -> None: ...\n"}
+    [found] = changes(tmp_path, before, after)
+    assert "timeout" in found
 
 
 def test_the_command_line_names_the_spec_and_the_tree(
