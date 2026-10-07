@@ -38,6 +38,18 @@ ACTION = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
 CALLABLE_FIELDS = ("action", "disturbs", "rehearsal", "idempotent")
 """Everything the contract says of an action a key may call, in that order. Anything else is refused, not dropped."""
 
+READ_FIELDS = ("path", "parameters", "kinds", "file")
+"""Everything the contract says of a read, in that order. Anything else is refused, not dropped."""
+
+PARAMETER_FIELDS = ("name", "repeatable")
+"""Everything the contract says of a read's query parameter. Anything else is refused, not dropped."""
+
+READ_PATH = re.compile(r"^/api/[a-z][a-z0-9]*(?:-[a-z0-9]+)*(?:/\{[a-z][a-z_]*\})?$")
+"""A read's path, as the core spells one: `/api/front-door`, or `/api/bundle/{name}` with its one placeholder."""
+
+PARAMETER = re.compile(r"^[a-z][a-z0-9_]*$")
+"""A query parameter's name, as the core spells one: `most`."""
+
 REFUSAL_STATUSES = range(400, 600)
 """The statuses a refusal may be answered with: the request's fault or the machine's."""
 
@@ -107,6 +119,12 @@ def malformed_refusal(code: str, entry: object) -> Iterator[str]:
         yield f"{code}: description {json.dumps(description)} is not a sentence"
 
 
+def unread_fields(at: str, listed: Mapping[str, object], fields: tuple[str, ...]) -> list[str]:
+    """Return a line naming every field `listed` carries that is not one of `fields`."""
+    unread = sorted(set(listed) - set(fields))
+    return [f"{at}: carries {', '.join(unread)}, which this generator does not read"] if unread else []
+
+
 @dataclass(frozen=True)
 class ByKey:
     """One action a key may call, as the contract lists it."""
@@ -130,13 +148,90 @@ def read_by_key(at: int, entry: object) -> tuple[ByKey | None, list[str]]:
     for flag, value in zip(CALLABLE_FIELDS[1:], flags, strict=True):
         if not isinstance(value, bool):
             wrong.append(f"entry {at}: {flag} {json.dumps(value)} is not true or false")
-    unread = sorted(set(listed) - set(CALLABLE_FIELDS))
-    if unread:
-        wrong.append(f"entry {at}: carries {', '.join(unread)}, which this generator does not read")
+    wrong.extend(unread_fields(f"entry {at}", listed, CALLABLE_FIELDS))
     if wrong or not isinstance(action, str):
         return None, wrong
     disturbs, rehearsal, idempotent = (value is True for value in flags)
     return ByKey(action, disturbs, rehearsal, idempotent), []
+
+
+@dataclass(frozen=True)
+class Parameter:
+    """One query parameter a read takes, as the contract lists it."""
+
+    name: str
+    repeatable: bool
+
+
+@dataclass(frozen=True)
+class Served:
+    """One read the web API serves, as the contract lists it."""
+
+    path: str
+    parameters: tuple[Parameter, ...]
+    kinds: tuple[str, ...]
+    file: bool
+
+
+def read_parameters(at: str, node: object) -> tuple[tuple[Parameter, ...], list[str]]:
+    """Return a read's query parameters, and everything wrong with them as lines naming where each sits."""
+    entries = array_of(node)
+    if entries is None:
+        return (), [f"{at}: parameters {json.dumps(node)} is not a list"]
+    read: list[Parameter] = []
+    wrong: list[str] = []
+    for place, entry in enumerate(entries):
+        here = f"{at}: parameter {place}"
+        listed = object_of(entry)
+        if listed is None:
+            wrong.append(f"{here}: not an object")
+            continue
+        name = listed.get("name")
+        repeatable = listed.get("repeatable")
+        if not isinstance(name, str) or not PARAMETER.fullmatch(name):
+            wrong.append(f"{here}: name {json.dumps(name)} is not a query parameter's name")
+        elif name in {one.name for one in read}:
+            wrong.append(f"{here}: {name} is listed twice")
+        if not isinstance(repeatable, bool):
+            wrong.append(f"{here}: repeatable {json.dumps(repeatable)} is not true or false")
+        wrong.extend(unread_fields(here, listed, PARAMETER_FIELDS))
+        if isinstance(name, str) and isinstance(repeatable, bool):
+            read.append(Parameter(name, repeatable))
+    return tuple(read), wrong
+
+
+def read_served(at: int, entry: object, kinds: frozenset[str]) -> tuple[Served | None, list[str]]:
+    """Return one read the web API serves, or everything wrong with it as lines naming where it sits."""
+    here = f"entry {at}"
+    listed = object_of(entry)
+    if listed is None:
+        return None, [f"{here}: not an object"]
+    path = listed.get("path")
+    answers = array_of(listed.get("kinds"))
+    file = listed.get("file")
+    parameters, wrong = read_parameters(here, listed.get("parameters"))
+    if not isinstance(path, str) or not READ_PATH.fullmatch(path):
+        wrong.append(f"{here}: path {json.dumps(path)} is not a read's path")
+    if answers is None or not all(isinstance(kind, str) for kind in answers):
+        wrong.append(f"{here}: kinds {json.dumps(listed.get('kinds'))} is not a list of kinds")
+        answers = []
+    wrong.extend(
+        f"{here}: answers with {kind}, which the contract describes no kind as"
+        for kind in answers
+        if kind not in kinds
+    )
+    if not isinstance(file, bool):
+        wrong.append(f"{here}: file {json.dumps(file)} is not true or false")
+    elif not file and not answers:
+        wrong.append(f"{here}: answers with neither a kind nor a file")
+    elif not file and isinstance(path, str) and "{" in path:
+        wrong.append(
+            f"{here}: takes part of {path} as a value, and this generator writes only a file read so",
+        )
+    wrong.extend(unread_fields(here, listed, READ_FIELDS))
+    if wrong or not isinstance(path, str):
+        return None, wrong
+    return Served(path, parameters, tuple(str(kind) for kind in answers), file is True), []
 
 
 def checked(artefact: Mapping[str, object], stamp: str) -> None:
@@ -231,6 +326,28 @@ def key_callable_of(artefact: Mapping[str, object]) -> list[ByKey]:
             "the vendored contract lists an action a key may call that this generator cannot write:\n  "
             + "\n  ".join(problems),
         )
+    return read
+
+
+def reads_of(artefact: Mapping[str, object]) -> list[Served]:
+    """Return the reads the web API serves, in the contract's order, or none for an artefact older than the list."""
+    listed = artefact.get("reads", [])
+    entries = array_of(listed)
+    if entries is None:
+        refuse(f"the vendored contract's reads are {json.dumps(listed)}, and they are a list of reads")
+    kinds = frozenset(kinds_of(artefact))
+    read: list[Served] = []
+    problems: list[str] = []
+    for at, entry in enumerate(entries):
+        one, wrong = read_served(at, entry, kinds)
+        problems.extend(wrong)
+        if one is None:
+            continue
+        if one.path in {served.path for served in read}:
+            problems.append(f"entry {at}: {one.path} is listed twice")
+        read.append(one)
+    if problems:
+        refuse("the vendored contract lists a read this generator cannot write:\n  " + "\n  ".join(problems))
     return read
 
 

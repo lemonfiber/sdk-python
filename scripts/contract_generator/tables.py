@@ -1,23 +1,34 @@
 # Copyright (c) 2026 NightWorksIO
-"""The modules written from the artefact's lists rather than its schemas: kinds, refusals and key-callable actions."""
+"""The modules written from the artefact's lists rather than its schemas: kinds, refusals, key-callable actions, reads."""
 
 import json
+import re
 from typing import TYPE_CHECKING
 
 from scripts.contract_generator.artefact import SPOKEN
 from scripts.contract_generator.modules import Module
+from scripts.contract_generator.refused import refuse
 from scripts.contract_generator.spelling import pascal
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
-    from scripts.contract_generator.artefact import ByKey
+    from scripts.contract_generator.artefact import ByKey, Served
 
 KINDS_PACKAGE = ("kinds",)
 """Where each kind's envelope, and the shapes only it carries, are written."""
 
 SHARED_PACKAGE = ("shared",)
 """Where the shapes more than one kind carries are written."""
+
+API = "/api"
+"""What every read's path begins with."""
+
+ONE_A_LINE = frozenset({"/api/logs"})
+"""The reads answered one envelope a line, which `Read` leaves out: the client reaches each by a method of its own."""
+
+PLACEHOLDER = re.compile(r"/\{([a-z][a-z_]*)\}$")
+"""The value a file read takes in its path: `/{name}`."""
 
 
 def envelope_module(kinds: Sequence[str]) -> Module:
@@ -158,3 +169,123 @@ def key_callable_module(callable_by_key: Sequence[ByKey]) -> Module:
     names = ["KEY_CALLABLE", "KeyCallable", "KeyCallableAction", "is_key_callable"]
     summary = "Every action an integration key may call, and what the contract says of each."
     return Module(("key_callable",), summary, body, names, standard=("types", "typing"))
+
+
+def member(served: Served) -> str:
+    """Return the name a read is written under: `/api/front-door` is `FRONT_DOOR`."""
+    return served.path.removeprefix(f"{API}/").split("/")[0].replace("-", "_").upper()
+
+
+def reached(served: Served) -> str:
+    """Return the path a read is reached on, short of any placeholder: `/api/bundle/{name}` at `/api/bundle`."""
+    return PLACEHOLDER.sub("", served.path)
+
+
+def joined(phrases: Sequence[str]) -> str:
+    """Return phrases joined as a sentence joins them: `a`, `b` and `c`."""
+    return phrases[0] if len(phrases) == 1 else f"{', '.join(phrases[:-1])} and {phrases[-1]}"
+
+
+def tupled(items: Sequence[str]) -> str:
+    """Return written items as the tuple literal the formatter keeps on one line."""
+    return f"({items[0]},)" if len(items) == 1 else f"({', '.join(items)})"
+
+
+def said(served: Served) -> str:
+    """Return what a read answers with and the query parameters it takes, as one sentence."""
+    kinds = " or ".join(f"`{kind}`" for kind in served.kinds)
+    if served.file:
+        placeholder = PLACEHOLDER.search(served.path)
+        answers = (
+            f"Answers with a file, named by `{placeholder.group(1)}` in the path"
+            if placeholder
+            else "Answers with a file"
+        )
+    elif served.path in ONE_A_LINE:
+        answers = f"Answers one envelope a line, each {kinds}"
+    else:
+        answers = f"Answers with {kinds}"
+    phrases = [f"`{one.name}`" + (" (more than once)" if one.repeatable else "") for one in served.parameters]
+    return f"{answers}; takes {joined(phrases)}." if phrases else f"{answers}."
+
+
+def reads_module(reads: Sequence[Served]) -> Module:
+    """Return the module of the reads the web API serves, and what the contract says of each."""
+    enveloped = [one for one in reads if not one.file and one.path not in ONE_A_LINE]
+    elsewhere = [one for one in reads if one.file or one.path in ONE_A_LINE]
+    body = [
+        "",
+        f"API: typing.Final = {json.dumps(API)}",
+        '"""What every read\'s path begins with."""',
+        "",
+        "",
+        "class Read(enum.StrEnum):",
+        '    """A read lemonfiber serves answering with one envelope, named for its path.',
+        "",
+        "    `READS` holds the kinds each answers with and the query parameters it takes.",
+        '    """',
+        "",
+    ]
+    for one in enveloped:
+        value = one.path.removeprefix(f"{API}/")
+        body.extend([f"    {member(one)} = {json.dumps(value)}", f'    """{said(one)}"""'])
+    body.extend(
+        [
+            "",
+            "    @property",
+            "    def path(self) -> str:",
+            '        """Return the path this read is served on."""',
+            '        return f"{API}/{self.value}"',
+        ],
+    )
+    names = ["API", "READS", "Read", "ReadParameter", "Readable"]
+    for one in elsewhere:
+        name = member(one)
+        if name in names:
+            refuse(f"the read {one.path} would be written as `{name}`, which this module already names")
+        names.append(name)
+        body.extend(["", f"{name}: typing.Final = {json.dumps(reached(one))}", f'"""{said(one)}"""'])
+    body.extend(
+        [
+            "",
+            "",
+            "class ReadParameter(typing.NamedTuple):",
+            '    """One query parameter a read takes."""',
+            "",
+            "    name: str",
+            '    """Its name in the query."""',
+            "    repeatable: bool",
+            '    """Whether it may be given more than once."""',
+            "",
+            "",
+            "class Readable(typing.NamedTuple):",
+            '    """What the contract says of one read."""',
+            "",
+            "    kinds: tuple[Kind, ...]",
+            '    """Every kind it may answer with."""',
+            "    parameters: tuple[ReadParameter, ...]",
+            '    """Every query parameter it takes, in the order the contract lists them."""',
+            "",
+            "",
+            "READS: typing.Final[typing.Mapping[Read, Readable]] = types.MappingProxyType({",
+        ],
+    )
+    for one in enveloped:
+        kinds = tupled([json.dumps(kind) for kind in one.kinds])
+        parameters = tupled([f"ReadParameter({json.dumps(p.name)}, {p.repeatable})" for p in one.parameters])
+        body.append(f"    Read.{member(one)}: Readable({kinds}, {parameters}),")
+    body.extend(
+        [
+            "})",
+            '"""What the contract says of each read answering with one envelope, in the order it lists them."""',
+        ],
+    )
+    summary = "Every read the web API serves, and what the contract says of each."
+    return Module(
+        ("reads",),
+        summary,
+        body,
+        names,
+        {("envelope",): {"Kind"}},
+        standard=("enum", "types", "typing"),
+    )

@@ -44,6 +44,7 @@ def artefact(
     refusals: object = None,
     version: object = 1,
     key_callable: object = None,
+    reads: object = None,
 ) -> dict[str, object]:
     """Return a whole artefact describing these kinds."""
     whole: dict[str, object] = {"api_version": version, "kinds": kinds}
@@ -51,6 +52,8 @@ def artefact(
         whole["refusals"] = refusals
     if key_callable is not None:
         whole["key_callable"] = key_callable
+    if reads is not None:
+        whole["reads"] = reads
     return whole
 
 

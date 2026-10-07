@@ -59,8 +59,10 @@ shows none of it.
 
 ## Reading
 
-`read` takes a `Read`, one member for each read the contract names, and an
-optional query:
+`read` takes a `Read`, one member for each read the contract lists that answers
+with one envelope, and an optional query. `READS`, importable from
+`lemonfiber.contract`, says which kinds each answers with and which query
+parameters it takes:
 
 ```python
 status = expect(client.read(Read.STATUS), "status")

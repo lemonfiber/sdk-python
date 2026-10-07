@@ -62,8 +62,8 @@ def test_a_generated_module_says_it_is_generated(path: pathlib.Path) -> None:
 
 
 @pytest.mark.parametrize("path", python_files(GENERATED), ids=str)
-def test_a_generated_module_depends_on_nothing_but_the_standard_typing(path: pathlib.Path) -> None:
-    assert imported(path) <= {"types", "typing"}
+def test_a_generated_module_depends_on_nothing_but_the_standard_typing_and_enum(path: pathlib.Path) -> None:
+    assert imported(path) <= {"enum", "types", "typing"}
 
 
 @pytest.mark.parametrize("path", written(), ids=str)

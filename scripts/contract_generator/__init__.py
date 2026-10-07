@@ -20,6 +20,7 @@ from scripts.contract_generator.artefact import (
     key_callable_of,
     kinds_of,
     read_artefact,
+    reads_of,
     refusals_of,
     users_of,
 )
@@ -34,6 +35,7 @@ from scripts.contract_generator.tables import (
     envelope_module,
     key_callable_module,
     narrowing_module,
+    reads_module,
     refusals_module,
 )
 from scripts.contract_generator.writer import Writer
@@ -64,6 +66,7 @@ def generate(
     kinds = kinds_of(artefact)
     refusals = refusals_of(artefact)
     callable_by_key = key_callable_of(artefact)
+    reads = reads_of(artefact)
 
     writer = Writer(users=users_of(kinds))
     names = sorted(kinds)
@@ -87,10 +90,11 @@ def generate(
             narrowing_module(names),
             refusals_module(refusals),
             key_callable_module(callable_by_key),
+            reads_module(reads),
             index(KINDS_PACKAGE, "Every kind's envelope, and the shapes only that kind carries.", kind_paths),
         ],
     )
-    members = [("envelope",), ("key_callable",), KINDS_PACKAGE, ("narrowing",), ("refusals",)]
+    members = [("envelope",), ("key_callable",), KINDS_PACKAGE, ("narrowing",), ("reads",), ("refusals",)]
     if shared_paths:
         modules.append(index(SHARED_PACKAGE, "Every shape more than one kind carries.", shared_paths))
         members.append(SHARED_PACKAGE)
