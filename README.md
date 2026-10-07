@@ -1,85 +1,110 @@
 # sdk-python
 
-The Python client for lemonfiber's web API: an asynchronous and a synchronous client over one generated contract.
+A Python client for the web API that [lemonfiber](https://github.com/lemonfiber/lemonfiber)
+serves. For Python programs, such as a Home Assistant integration or a script, that read or
+control a lemonfiber media stack, on the same machine or, with the stack's certificate pinned,
+from another one.
 
-What this repository is and what it must meet is specified in [`spec/30-repos/sdk-python.md`](https://github.com/lemonfiber/spec/blob/main/30-repos/sdk-python.md), against the [web API contract](https://github.com/lemonfiber/spec/blob/main/20-architecture/contracts/web-api.md).
+It has an asynchronous client (aiohttp) and a synchronous one (urllib3) that answer the same
+calls, typed answers for every kind the API returns, and a live event stream that marks
+values from before a dropped connection as stale.
 
-## Taking it
+**Not on PyPI.** There is no release yet; install it from GitHub at a commit.
 
-It is not published to a package registry. A consumer takes it by commit, either as a git dependency or by vendoring `src/lemonfiber/` under `_vendor/lemonfiber/` and recording the commit beside the copy in `_vendor/lemonfiber/REVISION`, which is what the backward-compatibility check reads.
+## Requirements
+
+- Python 3.14 or newer.
+- lemonfiber, serving its web API with `lemonfiber ui`.
+
+The only dependencies are `aiohttp` and `urllib3`.
+
+## Install
+
+Pin a commit from [the commit list](https://github.com/lemonfiber/sdk-python/commits/main):
 
 ```sh
 uv add "lemonfiber @ git+https://github.com/lemonfiber/sdk-python@<commit>"
 ```
 
-It needs Python 3.14 or newer, the oldest Home Assistant's current release supports, and depends on `aiohttp` and `urllib3` and nothing else.
+or, with pip, `pip install "lemonfiber @ git+https://github.com/lemonfiber/sdk-python@<commit>"`.
 
-## Using it
+To vendor it instead, copy `src/lemonfiber/` to `_vendor/lemonfiber/` in your project and
+write the commit you copied into `_vendor/lemonfiber/REVISION`.
 
-Both clients take an `Address` and a `Credential` and answer the same calls, one with `await`.
+## Quick start
+
+Start lemonfiber's web API. It prints the address and a token for this run:
+
+```console
+$ lemonfiber ui --port 9000 --no-browser
+lemonfiber is serving at:
+  http://[::1]:9000
+  http://127.0.0.1:9000
+…
+The token for this run, which the page will ask you for:
+  <token>
+```
+
+Then ask it how the stack is doing. Save this as `status.py`:
 
 ```python
-from lemonfiber import Address, AsyncClient, Credential, Read, SyncClient, expect
+import os
 
-# On this machine: the address and token lemonfiber printed when it started serving.
-with SyncClient(Address("http://127.0.0.1:43117"), Credential(token)) as client:
+from lemonfiber import Address, Credential, Read, SyncClient, expect
+
+address = Address("http://127.0.0.1:9000")
+credential = Credential(os.environ["LEMONFIBER_TOKEN"])
+
+with SyncClient(address, credential) as client:
     status = expect(client.read(Read.STATUS), "status")
 
-# Anywhere else: only with the stack's certificate pin, given with the address.
-address = Address(
-    "https://nas.local:8443", pin="86b25c676b761e9a398081373fec783c2bec970baa255370838aebb5c687841e"
-)
-async with AsyncClient(address, Credential(integration_key), session=session) as client:
-    started = expect(await client.act("repair", {"dry_run": False, "offer": offer}), "job")
-    outcome = await client.follow(started)  # Finished or Ended; a failure is raised
+print(status["data"]["condition"], status["data"]["active_forms"])
 ```
 
-- **The address.** A loopback address, or a host name resolving only to loopback, needs no pin. A name is resolved once, when the address is given, and every connection goes to an address it resolved to then, asking for the stack by its name, so a name that later resolves elsewhere reaches nothing new. Any other address is refused unless it was given with the stack's certificate pin: SHA-256 over the certificate's DER encoding, 64 hexadecimal characters. The pin is checked against the certificate the stack presents once the handshake completes and before any request is written, by `aiohttp.Fingerprint` and by urllib3's `assert_fingerprint`. No argument or setting weakens it. `await Address.resolved(...)` resolves a name without blocking the event loop.
-- **The credential.** The per-run token lemonfiber printed, a session's secret, or an integration key the operator minted, each a `Credential`. It travels in `X-Lemonfiber-Token` and never in a URL, and its `repr` shows nothing of it. `admit` and `admit_async` exchange a password for a session once.
-- **The session.** `AsyncClient` takes the `aiohttp.ClientSession` an application already holds, as Home Assistant gives an integration its own, and never closes it. Given none, it opens one and closes it in `aclose`.
-- **Answers.** `read` takes a `Read`, the reads the contract names; `logs` and `bundle` are the two reads that are not one envelope. `act` sends an action once and never retries it. `job`, `release` and `follow` redeem the name a long-running action answered with.
-- **What a key may call.** `KEY_CALLABLE` is the contract's list of the actions an integration key may call, in its order, each a `KeyCallable` saying whether calling it `disturbs` the running system and whether it takes a `rehearsal` (`dry_run`), so the real call can be offered after one. `is_key_callable` tells whether an action is on it. An `act` key is refused any other action, and a `read` key every action.
-- **What a stack can do.** `capabilities()` answers a `CapabilitySet`: every request the stack serves, by the path it is served at, with what it comes to for the credential that asked: `available`, `unconfigured` (a setting has to be turned on first) or `unpermitted` (this credential may not ask for it). `available`, `unconfigured` and `unpermitted` collect the paths in each state, so `unpermitted` is what a key's scope does not reach; `of_action`, `of_read` and `of` answer for one request, or `None` where the stack does not have it. A path this package does not know is kept, not refused. `read_at` says when it was read, since it can change while it is held.
-- **Problems.** Every failure is a `LemonfiberError`. A refusal is read from its code where the contract lists it and from its status where it carries none: `NotAdmittedError`, `DeclinedError`, `MissingError`, `MisaskedError`, `BusyError`, `TooManyAttemptsError` and `FailedError`, each carrying the status, the code and the problem document. An answer in a version this package does not speak is `ApiVersionMismatchError`, naming both versions.
+Run it with the token lemonfiber printed:
 
-## Following the live stream
-
-```python
-async with client.events() as stream:
-    async for arrival in stream:
-        match arrival:
-            case Live(envelope):  # carried just now
-                ...
-            case Stale(envelope, quiet_for):  # held from before a gap: not what is true now
-                ...
-            case Gap(why, quiet_for):  # the stream broke and is being reopened
-                ...
+```console
+$ LEMONFIBER_TOKEN=<token> python status.py
+active ['library']
 ```
 
-`SyncClient.events()` is the same stream for a plain `for` loop. The server speaks at least every 15 seconds; 30 seconds in silence is a broken stream rather than a quiet one. A broken stream is reopened from the last event id it carried, sent as `Last-Event-ID`, waiting a second and twice as long after each failure, and `StreamLostError` is raised once five attempts in a row have failed. Every value held from before a gap arrives again as `Stale` and stays stale until the stream carries it again; `stream.held()` says where each kind stands. A refused credential, a refused certificate or an answer in another version is raised at once rather than retried. A kind this package was not generated with arrives as `Unrecognised`, naming the kind and nothing more. An event, or a line of one, longer than 16,777,216 characters is refused as `UnreadableResponseError` rather than held.
+That is the output with only the `library` form running and healthy. A form is a named part
+of the stack, such as `library` or `tv`; see
+[forms](https://docs.lemonfiber.app/running/forms-and-slices/).
 
-Every shape the contract describes is importable from `lemonfiber.contract`.
+A failure is raised as a `LemonfiberError`, with a message you can show a person.
 
-## What is generated and what is written
+## Where to go next
 
-`src/lemonfiber/_generated/` is generated from the vendored `contract/web-api.contract.json`, the artefact lemonfiber builds from the types it serialises, and is never edited by hand. `contract/VERSION` records the lemonfiber commit it was taken from.
+- [The guide](docs/guide.md): the asynchronous client, reaching a stack on another machine,
+  sessions and integration keys, what a stack can do for a credential, actions and jobs, the
+  live event stream and every error.
+- [The web API](https://docs.lemonfiber.app/api/): the envelope every answer arrives in,
+  every payload kind and the field-by-field reference.
+- [The command reference](https://docs.lemonfiber.app/commands/every-command/): every read
+  and action is a command, and takes the same arguments.
 
-Each kind's envelope and the shapes only it carries are one module under `kinds/`, the shapes several kinds carry are one module per set of kinds under `shared/`, and the refusal codes and the actions a key may call have a module each. No module holds more lines than `[tool.lemonfiber.line-cap]` in `pyproject.toml` allows a source file; one that would is written as a package of parts, each a run of shapes that name one another. `lemonfiber.contract` hands on every shape, whichever module holds it.
-
-```sh
-uv run just sync <tag-or-commit>   # vendor the artefact one revision of lemonfiber serves
-uv run just generate               # rewrite src/lemonfiber/_generated/ from it
-```
-
-Everything else is written once, in Python: the envelope's version refusal, the token's placement, the pin, the stream's behaviour, and the error model.
-
-## Working on it
+## Contributing
 
 ```sh
 uv sync
-uv run just ci      # lint, strict types, the contract diff, the suite at 100% line and branch coverage
+uv run just ci   # lint, strict types, the contract check, tests at 100% line and branch coverage
 ```
 
-Mutation testing, the backward-compatibility check and the organisation's shared workflows run in CI.
+Mutation testing and the backward-compatibility check run in CI. `src/lemonfiber/_generated/`
+is generated from lemonfiber's contract and never edited by hand; the
+[guide](docs/guide.md#where-the-types-come-from) says how to regenerate it. Every change cites
+a requirement in the [specification](https://github.com/lemonfiber/spec); start with the
+[contributing guide](https://github.com/lemonfiber/spec/blob/main/50-governance/contributing.md).
 
-Hippocratic License 3.0. See [LICENSE](LICENSE).
+## Security
+
+Report a vulnerability privately, as the
+[security policy](https://github.com/lemonfiber/.github/blob/main/SECURITY.md) describes. Do
+not open a public issue.
+
+## Licence
+
+[Hippocratic License 3.0](LICENSE): source-available and ethical-source, not OSI-approved. The
+[licence rationale](https://github.com/lemonfiber/spec/blob/main/90-appendix/license-rationale.md)
+explains what that means for you. Made by NightWorksIO.
