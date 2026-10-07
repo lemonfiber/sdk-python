@@ -22,10 +22,10 @@ SHARED = {
 OWN = {"description": "Carried by one kind.", "type": "object", "properties": {"at": {"type": "integer"}}}
 
 
-def long(name: str, *refers: str) -> dict[str, object]:
-    """Return an object schema whose description runs to many lines, naming `refers` as its fields."""
+def long(name: str, *refers: str, lines: int = 12) -> dict[str, object]:
+    """Return an object schema whose description runs to `lines` lines, naming `refers` as its fields."""
     return {
-        "description": "\n".join(f"{name} says one more thing on line {line}." for line in range(12)),
+        "description": "\n".join(f"{name} says one more thing on line {line}." for line in range(lines)),
         "type": "object",
         "properties": {other.lower(): {"$ref": f"#/$defs/{other}"} for other in refers},
     }
@@ -89,8 +89,8 @@ def test_a_module_over_the_cap_is_a_package_of_parts_importing_one_way(tmp_path:
 
 def test_shapes_that_fit_together_share_a_part(tmp_path: pathlib.Path) -> None:
     small = {"type": "object", "properties": {"n": {"type": "integer"}}}
-    definitions: dict[str, object] = {"Huge": long("Huge"), "Little": small, "Tiny": small}
-    generated(tmp_path, artefact({"big": kind({"$ref": "#/$defs/Huge"}, definitions)}), cap=40)
+    definitions: dict[str, object] = {"Huge": long("Huge", lines=40), "Little": small, "Tiny": small}
+    generated(tmp_path, artefact({"big": kind({"$ref": "#/$defs/Huge"}, definitions)}), cap=64)
     parts = sorted((tmp_path / OUT / "kinds" / "big").glob("*.py"))
     assert len(parts) > 2
     holding = [part.read_text(encoding="utf-8") for part in parts]

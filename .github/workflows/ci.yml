@@ -143,18 +143,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      # The contract page lives in the spec and this repository does not vendor
-      # it, so the one check reading both trees needs both trees.
-      - name: Check out the canonical spec
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          repository: lemonfiber/spec
-          ref: main
-          path: .spec-canonical
-          persist-credentials: false
-      # Before the toolchain, which it needs none of.
-      - name: This client holds a path for every read the contract names
-        run: python3 scripts/the_doors_this_client_names.py --spec .spec-canonical
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       - name: Install exactly what the lockfile says
         run: uv sync --locked --no-build

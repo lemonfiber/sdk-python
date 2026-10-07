@@ -265,6 +265,123 @@ def test_an_action_a_key_may_call_this_generator_cannot_write_is_refused(listed:
     assert said in refusal(artefact(PULL, key_callable=listed))
 
 
+def served(
+    path: object,
+    *,
+    kinds: object = None,
+    parameters: object = None,
+    file: object = False,
+) -> dict[str, object]:
+    """Return one read the web API serves, as the contract lists it: answering `pull` and taking nothing, unless told."""
+    return {
+        "path": path,
+        "parameters": [] if parameters is None else parameters,
+        "kinds": ["pull"] if kinds is None else kinds,
+        "file": file,
+    }
+
+
+def parameter(name: object, *, repeatable: object = False) -> dict[str, object]:
+    """Return one query parameter a read takes, as the contract lists it."""
+    return {"name": name, "repeatable": repeatable}
+
+
+READS = [
+    served("/api/front-door", parameters=[parameter("form", repeatable=True), parameter("most")]),
+    served("/api/logs", kinds=["pull", "start"]),
+    served("/api/status"),
+    served("/api/bundle/{name}", kinds=[], file=True),
+    served("/api/export", kinds=[], file=True),
+]
+
+PULL_AND_START: dict[str, object] = {"pull": kind({"type": "string"}), "start": kind({"type": "string"})}
+
+
+def test_the_reads_are_generated_in_the_contracts_order_with_what_each_takes(tmp_path: pathlib.Path) -> None:
+    module = generated(tmp_path, artefact(PULL_AND_START, reads=READS))
+    assert list(module.Read) == ["front-door", "status"]
+    assert module.Read.FRONT_DOOR.path == "/api/front-door"
+    assert module.READS[module.Read.FRONT_DOOR] == module.Readable(
+        kinds=("pull",),
+        parameters=(
+            module.ReadParameter("form", repeatable=True),
+            module.ReadParameter("most", repeatable=False),
+        ),
+    )
+    assert module.READS[module.Read.STATUS] == module.Readable(kinds=("pull",), parameters=())
+    with pytest.raises(TypeError):
+        module.READS[module.Read.STATUS] = module.Readable(kinds=(), parameters=())
+
+
+def test_a_read_answered_a_line_at_a_time_or_with_a_file_is_a_path_beside_the_reads(
+    tmp_path: pathlib.Path,
+) -> None:
+    module = generated(tmp_path, artefact(PULL_AND_START, reads=READS))
+    assert (module.API, module.LOGS, module.BUNDLE, module.EXPORT) == (
+        "/api",
+        "/api/logs",
+        "/api/bundle",
+        "/api/export",
+    )
+    written = source(tmp_path, "reads.py")
+    assert '"""Answers with `pull`; takes `form` (more than once) and `most`."""' in written
+    assert '"""Answers one envelope a line, each `pull` or `start`."""' in written
+    assert '"""Answers with a file, named by `name` in the path."""' in written
+    assert '"""Answers with a file."""' in written
+
+
+def test_an_artefact_older_than_the_read_list_names_no_read(tmp_path: pathlib.Path) -> None:
+    module = generated(tmp_path, artefact(PULL))
+    assert list(module.Read) == []
+    assert dict(module.READS) == {}
+
+
+@pytest.mark.parametrize(
+    ("listed", "said"),
+    [
+        ({}, "they are a list of reads"),
+        (["/api/status"], "entry 0: not an object"),
+        ([served("/status")], 'entry 0: path "/status" is not a read\'s path'),
+        ([served("/api/Status")], 'entry 0: path "/api/Status" is not a read\'s path'),
+        ([served("/api/status", kinds="pull")], 'entry 0: kinds "pull" is not a list of kinds'),
+        (
+            [served("/api/status", kinds=["push"])],
+            "entry 0: answers with push, which the contract describes no",
+        ),
+        ([served("/api/status", kinds=[])], "entry 0: answers with neither a kind nor a file"),
+        ([served("/api/status", file="no")], 'entry 0: file "no" is not true or false'),
+        ([served("/api/status/{name}")], "entry 0: takes part of /api/status/{name} as a value"),
+        ([served("/api/status", parameters={})], "entry 0: parameters {} is not a list"),
+        ([served("/api/status", parameters=["form"])], "entry 0: parameter 0: not an object"),
+        ([served("/api/status", parameters=[parameter("Form")])], 'parameter 0: name "Form" is not a query'),
+        (
+            [served("/api/status", parameters=[parameter("form", repeatable=1)])],
+            "parameter 0: repeatable 1 is not true",
+        ),
+        (
+            [served("/api/status", parameters=[parameter("form"), parameter("form")])],
+            "entry 0: parameter 1: form is listed twice",
+        ),
+        (
+            [served("/api/status", parameters=[{**parameter("form"), "default": 1}])],
+            "entry 0: parameter 0: carries default, which this generator does not read",
+        ),
+        (
+            [{**served("/api/status"), "scope": "read"}],
+            "entry 0: carries scope, which this generator does not read",
+        ),
+        ([served("/api/status"), served("/api/status")], "entry 1: /api/status is listed twice"),
+    ],
+)
+def test_a_read_this_generator_cannot_write_is_refused(listed: object, said: str) -> None:
+    assert said in refusal(artefact(PULL, reads=listed))
+
+
+def test_a_path_beside_the_reads_taking_a_name_the_module_holds_is_refused() -> None:
+    listed = [served("/api/api/{name}", kinds=[], file=True)]
+    assert "/api/api/{name} would be written as `API`" in refusal(artefact(PULL, reads=listed))
+
+
 def test_a_missing_stamp_says_the_revision_is_unknown(tmp_path: pathlib.Path) -> None:
     write(tmp_path, artefact({"pull": kind({"type": "string"})}), stamp=None)
     assert run(tmp_path) == 0
