@@ -20,6 +20,7 @@ from lemonfiber._protocol import operation
 from lemonfiber._protocol.calls import DEFAULT_TIMEOUT, Answer, Call, with_credential
 from lemonfiber._protocol.following import DEFAULT_EVERY, job_name, next_wait
 from lemonfiber._protocol.refusals import CERTIFICATE_REFUSED, NOT_ANSWERING, opening_refusal
+from lemonfiber._protocol.retry import Attempts
 from lemonfiber.jobs import Ended, Finished, Running
 from lemonfiber.problems import (
     CertificateRefusedError,
@@ -148,6 +149,35 @@ async def exchange(
     raise UnreachableError(NOT_ANSWERING)
 
 
+async def asked(
+    session: aiohttp.ClientSession,
+    address: Address,
+    tls: TlsSetting,
+    call: Call,
+    attempts: Attempts,
+) -> Answer:
+    """Send a call, and send a read again after a passing failure, as `attempts` allows.
+
+    The last attempt's outcome is the call's: its answer, or the failure that
+    nothing answered.
+    """
+    loop = asyncio.get_running_loop()
+    while True:
+        outcome: Answer | UnreachableError
+        limit = aiohttp.ClientTimeout(total=attempts.left(loop.time()))
+        try:
+            outcome = await exchange(session, address, tls, call, limit)
+        except UnreachableError as unanswered:
+            outcome = unanswered
+        pause = attempts.pause(outcome if isinstance(outcome, Answer) else None, loop.time())
+        if pause is None:
+            break
+        await asyncio.sleep(pause)
+    if isinstance(outcome, UnreachableError):
+        raise outcome
+    return outcome
+
+
 class AsyncClient:
     """Talks to one stack, asynchronously, with one credential.
 
@@ -170,7 +200,7 @@ class AsyncClient:
         self._given = None if session is None else checked(session)
         self._owned: aiohttp.ClientSession | None = None
         self._tls = tls_for(address)
-        self._limit = aiohttp.ClientTimeout(total=timeout)
+        self._timeout = timeout
 
     @property
     def address(self) -> Address:
@@ -184,12 +214,10 @@ class AsyncClient:
             self._owned = aiohttp.ClientSession()
         return self._owned
 
-    async def _answer(self, call: Call) -> Answer:
-        sent = with_credential(call, self._credential)
-        return await exchange(self._session(), self._address, self._tls, sent, self._limit)
-
-    async def _run[T](self, asked: operation.Operation[T]) -> T:
-        return asked.read(await self._answer(asked.call))
+    async def _run[T](self, operated: operation.Operation[T]) -> T:
+        call = with_credential(operated.call, self._credential)
+        attempts = Attempts(operated.again, self._timeout, asyncio.get_running_loop().time())
+        return operated.read(await asked(self._session(), self._address, self._tls, call, attempts))
 
     async def read(self, read: Read, query: Query | None = None) -> Envelope:
         """Ask for what a command prints under `--json`."""
@@ -265,7 +293,7 @@ class AsyncClient:
         `reconnects` attempts in a row have failed.
         """
         following = Following(self._credential, silence=silence, reconnects=reconnects, first_wait=first_wait)
-        connect = aiohttp.ClientTimeout(total=None, sock_connect=self._limit.total)
+        connect = aiohttp.ClientTimeout(total=None, sock_connect=self._timeout)
         return AsyncStream(self._session, self._address, self._tls, following, connect)
 
     async def aclose(self) -> None:
@@ -418,10 +446,10 @@ async def admit_async(
     credential is what an `AsyncClient` is then built with. The offer waits as
     long as a client's call does by default; `asyncio.timeout` around it waits less.
     """
-    asked = operation.admission(password, name)
+    offered = operation.admission(password, name)
     tls = tls_for(address)
     limit = aiohttp.ClientTimeout(total=DEFAULT_TIMEOUT)
     if session is not None:
-        return asked.read(await exchange(checked(session), address, tls, asked.call, limit))
+        return offered.read(await exchange(checked(session), address, tls, offered.call, limit))
     async with aiohttp.ClientSession() as opened:
-        return asked.read(await exchange(opened, address, tls, asked.call, limit))
+        return offered.read(await exchange(opened, address, tls, offered.call, limit))

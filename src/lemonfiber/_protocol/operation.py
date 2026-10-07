@@ -43,26 +43,28 @@ class Operation[T]:
 
     call: Call
     read: Callable[[Answer], T]
+    again: bool = False
+    """Whether the request is a read, which may be asked again after a passing failure."""
 
 
 def reading(read: Read, query: Query | None) -> Operation[Envelope]:
     """Ask for what a command prints under `--json`."""
-    return Operation(read_call(read, query), envelope_of)
+    return Operation(read_call(read, query), envelope_of, again=True)
 
 
 def capabilities() -> Operation[CapabilitySet]:
     """Ask what the stack can do, for the credential the call carries."""
-    return Operation(capabilities_call(), capabilities_of)
+    return Operation(capabilities_call(), capabilities_of, again=True)
 
 
 def logs(services: Sequence[str], forms: Sequence[str], tail: int | None) -> Operation[list[LogEnvelope]]:
     """Ask for what the services have been saying, a `log` envelope a line."""
-    return Operation(logs_call(services, forms, tail), log_lines_of)
+    return Operation(logs_call(services, forms, tail), log_lines_of, again=True)
 
 
 def bundle(name: str) -> Operation[BundleFile]:
     """Fetch one support bundle, by name, as the bytes it is."""
-    return Operation(bundle_call(name), lambda answer: bundle_of(name, answer))
+    return Operation(bundle_call(name), lambda answer: bundle_of(name, answer), again=True)
 
 
 def action(name: str, arguments: Mapping[str, Json] | None) -> Operation[Envelope]:
@@ -72,7 +74,7 @@ def action(name: str, arguments: Mapping[str, Json] | None) -> Operation[Envelop
 
 def job(name: str) -> Operation[JobStanding]:
     """Ask where the work a name stands for got to."""
-    return Operation(job_call(name, HTTPMethod.GET), lambda answer: standing_of(name, answer))
+    return Operation(job_call(name, HTTPMethod.GET), lambda answer: standing_of(name, answer), again=True)
 
 
 def release(name: str) -> Operation[JobStanding]:
