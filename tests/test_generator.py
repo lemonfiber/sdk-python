@@ -467,12 +467,47 @@ def test_an_inline_name_the_generator_owns_is_refused() -> None:
         ({"type": "object"}, "is an object that says nothing of its fields"),
         ({"type": "tuple"}, "is of type 'tuple'"),
         ({"const": [1]}, "a constant of [1] has no Python literal"),
-        ({"$ref": "other.json#/x"}, "refers to other.json#/x, outside the definitions beside it"),
-        ({"$ref": "#/$defs/Missing"}, "`a` refers to `Missing`, which it does not define"),
     ],
 )
 def test_a_shape_this_generator_cannot_read_is_refused_rather_than_guessed(schema: object, said: str) -> None:
     assert said in refusal(artefact({"a": kind(schema, {})}))
+
+
+INSIDE = {"type": "object", "properties": {"v": {"$ref": "#/$defs/Missing"}}}
+"""A definition whose one property refers to a definition its kind does not hold."""
+
+
+@pytest.mark.parametrize(
+    ("data", "definitions", "said"),
+    [
+        (
+            {"$ref": "other.json#/x"},
+            {},
+            "the envelope of `a` property `data` refers to other.json#/x, outside the definitions beside it",
+        ),
+        (
+            {"$ref": "#/$defs/Missing"},
+            {"Code": CODE},
+            "the envelope of `a` property `data` refers to #/$defs/Missing, which `a` does not define",
+        ),
+        (
+            {"$ref": "#/$defs/Inside"},
+            {"Inside": INSIDE},
+            "`Inside`, defined by `a` property `v` refers to #/$defs/Missing, which `a` does not define",
+        ),
+    ],
+)
+def test_a_reference_to_no_definition_is_refused_naming_it_and_where_it_sits_and_nothing_is_written(
+    tmp_path: pathlib.Path,
+    capsys: pytest.CaptureFixture[str],
+    data: object,
+    definitions: dict[str, object],
+    said: str,
+) -> None:
+    write(tmp_path, artefact({"a": kind(data, definitions)}))
+    assert run(tmp_path) == 1
+    assert not (tmp_path / OUT).exists()
+    assert said in capsys.readouterr().err
 
 
 @pytest.mark.parametrize("name", ["lower", "Not-A-Name", "None2-", "Code\n"])

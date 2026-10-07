@@ -113,9 +113,7 @@ class Writer:
             )
         if not DEFINITION.fullmatch(name) or keyword.iskeyword(name):
             refuse(f"`{name}`, defined by `{self.kind}`, is not a name a Python type can carry")
-        schema = self.definitions.get(name)
-        if schema is None:
-            refuse(f"`{self.kind}` refers to `{name}`, which it does not define")
+        schema = self.definitions[name]
         canonical = json.dumps(schema, sort_keys=True)
         held = self.shared.get(name)
         if held is not None:
@@ -208,6 +206,8 @@ class Writer:
             matched = REFERENCE.fullmatch(str(reference))
             if matched is None:
                 refuse(f"{origin} refers to {reference}, outside the definitions beside it")
+            if matched.group(1) not in self.definitions:
+                refuse(f"{origin} refers to {reference}, which `{self.kind}` does not define")
             return self.definition(matched.group(1))
         if "const" in node:
             return f"typing.Literal[{literal(node['const'])}]"
