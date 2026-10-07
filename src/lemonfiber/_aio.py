@@ -34,11 +34,11 @@ if TYPE_CHECKING:
     from types import TracebackType
 
     from lemonfiber._generated import Envelope, JobEnvelope
-    from lemonfiber._protocol.answers import Admitted, Bundle
     from lemonfiber._protocol.calls import Json, Query
     from lemonfiber.address import Address, Route
     from lemonfiber.capabilities import CapabilitySet
-    from lemonfiber.credential import Credential
+    from lemonfiber.credential import Credential, Session
+    from lemonfiber.files import BundleFile
     from lemonfiber.jobs import JobStanding
     from lemonfiber.reads import Read
     from lemonfiber.stream import Arrival, Live, Stale
@@ -203,7 +203,7 @@ class AsyncClient:
         """Ask for what the services have been saying, a `log` envelope a line."""
         return await self._run(operation.logs(query))
 
-    async def bundle(self, name: str) -> Bundle:
+    async def bundle(self, name: str) -> BundleFile:
         """Fetch one support bundle this run wrote, by name, as the bytes it is."""
         return await self._run(operation.bundle(name))
 
@@ -400,7 +400,7 @@ async def admit_async(
     *,
     name: str | None = None,
     session: aiohttp.ClientSession | None = None,
-) -> Admitted:
+) -> Session:
     """Offer a password, once, and come away with a session or with why there is none.
 
     A household member gives their `name`; the operator gives none. The session's

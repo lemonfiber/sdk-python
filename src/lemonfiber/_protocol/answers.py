@@ -3,14 +3,14 @@
 
 import datetime
 import types
-from dataclasses import dataclass
 from http import HTTPStatus
 from typing import TYPE_CHECKING, Final, cast
 
 from lemonfiber._protocol.refusals import code_in, problem_in, refusal_of, sentence_in
 from lemonfiber.capabilities import CapabilitySet, is_state
-from lemonfiber.credential import Credential
+from lemonfiber.credential import Credential, Session
 from lemonfiber.envelope import expect, parse_envelope
+from lemonfiber.files import BundleFile
 from lemonfiber.jobs import Ended, Finished, JobStanding, Running
 from lemonfiber.problems import NoSuchJobError, PasswordRefusedError, UnreadableResponseError
 
@@ -20,27 +20,6 @@ if TYPE_CHECKING:
 
 REFUSED_AT_THE_DOOR: Final = "That is not the password, or none is configured."
 """What a refused password is told where the stack said nothing readable."""
-
-
-@dataclass(frozen=True, slots=True)
-class Bundle:
-    """A file lemonfiber handed over, kept as the bytes that arrived."""
-
-    name: str
-    content: bytes
-    content_type: str | None
-
-
-@dataclass(frozen=True, slots=True)
-class Admitted:
-    """A session opened: the credential it is carried by, when it stops being one, and whose it is.
-
-    `member` is the household member the session is for; absent is the operator.
-    """
-
-    credential: Credential
-    until: datetime.datetime
-    member: str | None
 
 
 def succeeded(answer: Answer) -> bool:
@@ -62,11 +41,11 @@ def envelopes_of(answer: Answer) -> list[Envelope]:
     return [parse_envelope(line) for line in answer.body.splitlines() if line.strip()]
 
 
-def bundle_of(name: str, answer: Answer) -> Bundle:
+def bundle_of(name: str, answer: Answer) -> BundleFile:
     """Keep a handed-over file as it arrived, or raise the refusal it is."""
     if not succeeded(answer):
         raise refusal_of(answer)
-    return Bundle(name, answer.body, answer.headers.get("content-type"))
+    return BundleFile(name, answer.body, answer.headers.get("content-type"))
 
 
 def standing_of(job: str, answer: Answer) -> JobStanding:
@@ -101,7 +80,7 @@ def capabilities_of(answer: Answer) -> CapabilitySet:
     return CapabilitySet(types.MappingProxyType(states), arrived)
 
 
-def admitted_of(answer: Answer) -> Admitted:
+def session_of(answer: Answer) -> Session:
     """Read the door's answer as a session, or raise why there is none."""
     if answer.status == HTTPStatus.UNAUTHORIZED:
         raise PasswordRefusedError(
@@ -111,7 +90,7 @@ def admitted_of(answer: Answer) -> Admitted:
             problem=problem_in(answer.body),
         )
     data = expect(envelope_of(answer), "admission")["data"]
-    return Admitted(Credential(data["token"]), instant(data["until"]), data.get("member"))
+    return Session(Credential(data["token"]), instant(data["until"]), data.get("member"))
 
 
 def instant(written: str) -> datetime.datetime:

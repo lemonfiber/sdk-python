@@ -14,8 +14,7 @@ if TYPE_CHECKING:
 
     from lemonfiber import (
         Address,
-        Admitted,
-        Bundle,
+        BundleFile,
         CapabilitySet,
         Credential,
         Ended,
@@ -25,6 +24,7 @@ if TYPE_CHECKING:
         Json,
         Query,
         Read,
+        Session,
     )
     from lemonfiber._aio import AsyncStream
     from lemonfiber._sync import SyncStream
@@ -114,7 +114,7 @@ class Driver(Protocol):
         """Read the logs."""
         ...
 
-    def bundle(self, name: str) -> Bundle:
+    def bundle(self, name: str) -> BundleFile:
         """Fetch a bundle."""
         ...
 
@@ -170,7 +170,7 @@ class SyncDriver:
         """Read the logs."""
         return self.client.logs(query)
 
-    def bundle(self, name: str) -> Bundle:
+    def bundle(self, name: str) -> BundleFile:
         """Fetch a bundle."""
         return self.client.bundle(name)
 
@@ -239,7 +239,7 @@ class AsyncDriver:
         """Read the logs."""
         return self.run(self.client.logs(query))
 
-    def bundle(self, name: str) -> Bundle:
+    def bundle(self, name: str) -> BundleFile:
         """Fetch a bundle."""
         return self.run(self.client.bundle(name))
 
@@ -300,7 +300,7 @@ def connect(
     return AsyncDriver(runner, client, given, encrypted=address.scheme == ENCRYPTED)
 
 
-def admitted(flavour: Flavour, address: Address, password: str, name: str | None = None) -> Admitted:
+def admitted(flavour: Flavour, address: Address, password: str, name: str | None = None) -> Session:
     """Offer a password at the door with the flavour asked for."""
     if flavour == "sync":
         return admit(address, password, name=name, timeout=5.0)
