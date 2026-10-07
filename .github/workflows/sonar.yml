@@ -33,7 +33,35 @@ concurrency:
 # is refused unless it is the one regular file expected, and reaches the scanner
 # as an argument, so it can overwrite nothing the scanner reads and is never run.
 jobs:
+  # Whether this change reaches code, asked of the script `ci.yml`'s `what
+  # changed` asks, so the two cannot disagree about a path. Where it does not,
+  # there is no suite to measure: `coverage` skips, and the scan runs without a
+  # report on a pull request and not at all on `main`.
+  scope:
+    name: what changed
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # Every commit, so the base is here to compare against, and no file
+          # contents but the checkout's: the comparison reads trees, and the
+          # workflow lines it reads are fetched when it asks for them.
+          fetch-depth: 0
+          filter: blob:none
+      - id: diff
+        env:
+          # A pull request's base, or on a push the commit before it. Any other
+          # event has none, and the answer is then that everything runs.
+          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+        run: python3 scripts/the_code_a_change_touches.py "${BASE}"
+
   coverage:
+    needs: scope
+    if: ${{ !cancelled() && (needs.scope.result != 'success' || needs.scope.outputs.code == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -58,16 +86,29 @@ jobs:
           if-no-files-found: error
 
   sonar:
-    needs: coverage
+    needs: [scope, coverage]
     # Runs whatever coverage did, and fails at once when it failed: a skipped job
     # reports as passing, so `sonar` would read green over a suite that did not
     # reach 100%. `!cancelled()` rather than `always()`, because a cancelled run is
     # somebody pressing stop.
-    if: ${{ !cancelled() }}
+    #
+    # Where the change reaches no code, coverage skipped and there is no report.
+    # On a pull request the scan runs without one, because the
+    # `SonarCloud Code Analysis` check it posts is required and appears only
+    # where a scan ran; nothing it changed is a line the report would measure.
+    # On `main` it skips, because an analysis of `main` without a report would
+    # set the project's coverage to nothing.
+    if: ${{ !cancelled() && (github.event_name == 'pull_request' || needs.scope.result != 'success' || needs.scope.outputs.code == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      CODE: ${{ needs.scope.result != 'success' || needs.scope.outputs.code == 'true' }}
     steps:
+      - name: No code changed, so the scan reads no coverage report
+        if: env.CODE != 'true'
+        run: echo "::notice::Every path this change touches is one the suite does not read, so coverage did not run and the scan reads no report."
       - name: The coverage gate held
+        if: env.CODE == 'true'
         env:
           RESULT: ${{ needs.coverage.result }}
         run: |
@@ -84,12 +125,14 @@ jobs:
       # Into the runner's temporary directory, never the workspace: the artifact
       # comes from the job that ran the repository's code.
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        if: env.CODE == 'true'
         with:
           name: coverage
           path: ${{ runner.temp }}/coverage
       # What was found is reduced to one line of plain characters before it is
       # printed, so a file name cannot read as a workflow command.
       - name: The report is the one file expected
+        if: env.CODE == 'true'
         env:
           DIR: ${{ runner.temp }}/coverage
           EXPECTED: coverage.xml
@@ -122,9 +165,10 @@ jobs:
         uses: SonarSource/sonarqube-scan-action@d209202bc7d53ff1cc128f7f907dac145c9d6ae9 # v8.3.0
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        # The report's path is given here rather than in `sonar-project.properties`.
+        # The report's path is given here rather than in `sonar-project.properties`,
+        # and only where there is a report.
         with:
-          args: -Dsonar.python.coverage.reportPaths=${{ runner.temp }}/coverage/coverage.xml
+          args: ${{ env.CODE == 'true' && format('-Dsonar.python.coverage.reportPaths={0}/coverage/coverage.xml', runner.temp) || '' }}
       # Runs when the scan failed, and says whether the host was answering: a
       # scanner that cannot reach SonarCloud fails with a trace that reads like a
       # finding. It changes nothing about the run; the scan still failed and the
