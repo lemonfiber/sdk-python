@@ -47,6 +47,7 @@ from .kinds import (
     OutboundEnvelope,
     PairingEnvelope,
     PausingEnvelope,
+    PlayingEnvelope,
     PluginsEnvelope,
     PreviewEnvelope,
     ProvenanceEnvelope,
@@ -124,6 +125,7 @@ type Kind = typing.Literal[
     "outbound",
     "pairing",
     "pausing",
+    "playing",
     "plugins",
     "preview",
     "provenance",
@@ -202,6 +204,7 @@ type Envelope = (
     | OutboundEnvelope
     | PairingEnvelope
     | PausingEnvelope
+    | PlayingEnvelope
     | PluginsEnvelope
     | PreviewEnvelope
     | ProvenanceEnvelope

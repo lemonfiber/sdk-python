@@ -50,6 +50,8 @@ class Read(StrEnum):
     """What a surface can mark as new: `news-items`."""
     OUTBOUND = "outbound"
     """Everything that leaves this machine: `outbound`."""
+    PLAYING = "playing"
+    """What the media server is playing now, narrowed by `member`: `playing`."""
     PLUGINS = "plugins"
     """The plugins installed: `plugins`."""
     PROVENANCE = "provenance"
