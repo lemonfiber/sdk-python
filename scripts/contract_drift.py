@@ -160,7 +160,8 @@ def verdict(
 def run(arguments: list[str], root: pathlib.Path, take: Callable[[str], bytes] = fetch) -> int:
     """Compare the contract vendored under `root` with the one the named revision serves."""
     gate = arguments[:1] == [GATE]
-    revision = arguments[1 if gate else 0] if len(arguments) == 1 + gate else ""
+    named = arguments[1:] if gate else arguments
+    revision = named[0] if len(named) == 1 else ""
     if not REVISION.fullmatch(revision):
         sys.stderr.write(
             "contract_drift: name a release tag or a full 40-character commit hash, and nothing else\n",

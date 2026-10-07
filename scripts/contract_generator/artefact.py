@@ -19,6 +19,9 @@ UNKNOWN = "an unknown revision"
 SPOKEN = 1
 """The wire version this package implements."""
 
+DIALECT = "$schema"
+"""The keyword a schema names the dialect it is written in with."""
+
 INLINE = "#/$defs/"
 """How the artefact spells a reference to a definition beside it, before the definition's name."""
 

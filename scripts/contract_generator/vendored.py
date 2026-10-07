@@ -15,7 +15,7 @@ import pathlib
 import posixpath
 from dataclasses import dataclass, field
 
-from scripts.contract_generator.artefact import INLINE, UNKNOWN, array_of, object_of
+from scripts.contract_generator.artefact import DIALECT, INLINE, UNKNOWN, array_of, object_of
 from scripts.contract_generator.refused import ArtefactRefusedError, refuse
 from scripts.contract_sync import ARTEFACT, DIRECTORY, INDEX, LISTS, STAMP
 
@@ -98,10 +98,11 @@ class Directory:
             if name in reached:
                 continue
             definition = self.definition(name)
-            if definition.dialect != node.get("$schema"):
+            dialect = node.get(DIALECT)
+            if definition.dialect != dialect:
                 refuse(
                     f"{definition.path} is written in {json.dumps(definition.dialect)}, and {path}, "
-                    f"which reaches it, in {json.dumps(node.get('$schema'))}",
+                    f"which reaches it, in {json.dumps(dialect)}",
                 )
             reached[name] = definition.schema
             waiting.extend(sorted(definition.refers))
@@ -119,8 +120,8 @@ class Directory:
         if node is None:
             refuse(f"{path} is not an object, and a definition is a schema")
         refers: set[str] = set()
-        schema = self.spelled({key: value for key, value in node.items() if key != "$schema"}, path, refers)
-        self.read[name] = Definition(path, schema, node.get("$schema"), frozenset(refers))
+        schema = self.spelled({key: value for key, value in node.items() if key != DIALECT}, path, refers)
+        self.read[name] = Definition(path, schema, node.get(DIALECT), frozenset(refers))
         return self.read[name]
 
     def spelled(

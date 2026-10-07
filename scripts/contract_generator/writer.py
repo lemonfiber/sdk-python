@@ -7,7 +7,15 @@ import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, cast
 
-from scripts.contract_generator.artefact import ANNOTATIONS, INLINE, as_list, as_map, as_maps, object_of
+from scripts.contract_generator.artefact import (
+    ANNOTATIONS,
+    DIALECT,
+    INLINE,
+    as_list,
+    as_map,
+    as_maps,
+    object_of,
+)
 from scripts.contract_generator.refused import ArtefactRefusedError, refuse
 from scripts.contract_generator.shapes import Field, Shape, class_lines
 from scripts.contract_generator.spelling import docstring, is_field_name, literal, pascal
@@ -18,7 +26,7 @@ if TYPE_CHECKING:
 NARROWING = frozenset(
     {
         "$defs",
-        "$schema",
+        DIALECT,
         "additionalProperties",
         "exclusiveMaximum",
         "exclusiveMinimum",
