@@ -24,10 +24,18 @@ permissions:
   contents: read
 
 concurrency:
-  # One catch-up at a time. Two runs racing would each reset the branch under
-  # the other, and the pull request would end up describing neither.
+  # One catch-up at a time, and the newest wins. Two runs racing would each
+  # reset the branch under the other, and a run still in flight when the server
+  # moves again is building a catch-up the next run replaces, so it is cancelled
+  # rather than left to push a head whose checks nobody will read.
+  #
+  # A run cancelled at any step leaves nothing the next one cannot finish. The
+  # scratch ref is reset before it is used and deleted by whichever run gets
+  # past it; the branch moves in one call or not at all; and a pull request left
+  # unopened or unarmed is not what the next run treats as already carried, so
+  # that run pushes and opens or arms it.
   group: contract-bump
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 env:
   BRANCH: chore/the-client-takes-the-contract
@@ -153,6 +161,101 @@ jobs:
           changed="$(uv run --locked --no-build python -m scripts.what_the_bump_takes < "${RUNNER_TEMP}/status")"
           printf '%s\n' "$changed"
 
+          # Pushed only when the push would change something. Every push moves
+          # the pull request's head and runs its whole suite again, and a run
+          # that regenerated exactly what the open pull request already holds
+          # would spend that suite on nothing.
+          #
+          # Asked of the branch, not of `main`: while a pull request is open,
+          # `main` still holds what it replaces, so a comparison with `main`
+          # finds a change every time. What is compared is whole trees: the
+          # commit the branch was built on with this run's writes laid over it
+          # and its removals taken out, against the branch itself. That sees a
+          # file whose bytes differ, and also a file the branch carries that
+          # this run no longer writes, which comparing only the files written
+          # here would miss. A `main` that has
+          # moved on since is not a difference: the pull request's diff holds
+          # none of it either way.
+          #
+          # It says "carried" only on proof. A branch that does not exist, no
+          # open pull request on it, a tree too large to list, or any call that
+          # fails means a push, as does a clean build whose pull request has no
+          # auto-merge armed: that is what a run cancelled between moving the
+          # branch and arming it leaves, and the push is what arms it.
+          if CHANGED="$changed" python3 - >"${RUNNER_TEMP}/carried" <<'PY'
+          import hashlib
+          import json
+          import os
+          import subprocess
+          import sys
+
+          repo, branch = os.environ["REPO"], os.environ["BRANCH"]
+          changed = [line.split(" ", 1) for line in os.environ["CHANGED"].splitlines() if line]
+
+
+          def api(path):
+              done = subprocess.run(["gh", "api", path], capture_output=True, text=True)
+              if done.returncode != 0:
+                  sys.exit(f"pushing: {path} answered {done.stderr.strip() or done.returncode}")
+              return json.loads(done.stdout)
+
+
+          def blob(name):
+              # The id git gives these bytes, which is what a tree records for
+              # a file, so equal ids are equal bytes.
+              with open(name, "rb") as handle:
+                  data = handle.read()
+              return hashlib.sha1(b"blob %d\0" % len(data) + data).hexdigest()
+
+
+          def blobs(commit):
+              tree = api(f"repos/{repo}/git/trees/{commit}?recursive=1")
+              if tree.get("truncated", True):
+                  sys.exit(f"pushing: the tree of {commit} is too large to list whole")
+              return {e["path"]: e["sha"] for e in tree["tree"] if e["type"] == "blob"}
+
+
+          head = api(f"repos/{repo}/git/ref/heads/{branch}")["object"]["sha"]
+          owner = repo.split("/")[0]
+          pulls = [
+              pull
+              for pull in api(f"repos/{repo}/pulls?head={owner}:{branch}&state=open")
+              if pull["head"]["ref"] == branch and pull["head"]["repo"]["full_name"] == repo
+          ]
+          if not pulls:
+              sys.exit(f"pushing: no pull request is open on {branch}")
+          pull = pulls[0]
+          if os.environ["CLEAN"] == "success" and not pull.get("auto_merge"):
+              sys.exit(f"pushing: #{pull['number']} has no auto-merge armed, which a clean run leaves")
+
+          base = api(f"repos/{repo}/compare/main...{head}")["merge_base_commit"]["sha"]
+          after = blobs(base)
+          for change, name in changed:
+              if change == "D":
+                  after.pop(name, None)
+              else:
+                  after[name] = blob(name)
+          carried = blobs(head)
+          differ = sorted(p for p in after.keys() | carried.keys() if after.get(p) != carried.get(p))
+          if differ:
+              sys.exit(f"pushing: {len(differ)} path(s) differ from {branch}, first {', '.join(differ[:5])}")
+          print(head, pull["number"])
+          PY
+          then
+            read -r carried pull <"${RUNNER_TEMP}/carried"
+            # A scratch ref a cancelled run left behind would otherwise wait for
+            # the next push to clear it.
+            gh api --method DELETE "repos/${REPO}/git/refs/heads/${BRANCH}-staging" >/dev/null 2>&1 || true
+            echo "carried=yes" >> "$GITHUB_OUTPUT"
+            echo "::notice::${BRANCH} already holds this at ${carried}; nothing pushed."
+            {
+              echo "## \`${BRANCH}\` already carries this"
+              echo ""
+              echo "Its head \`${carried}\` holds byte for byte what this run would commit, so nothing was pushed and #${pull} and its checks were left alone."
+            } >>"${GITHUB_STEP_SUMMARY:-/dev/null}"
+            exit 0
+          fi
+
           # `main` requires signed commits, and only commits GitHub itself makes
           # are signed here. `createCommitOnBranch` is that: it writes the files
           # and signs the result, so the branch is mergeable rather than merely
@@ -267,7 +370,7 @@ jobs:
           echo "clean=${CLEAN}" >> "$GITHUB_OUTPUT"
 
       - name: Open the pull request, or leave the open one updated
-        if: steps.behind.outputs.moved == 'yes'
+        if: steps.behind.outputs.moved == 'yes' && steps.commit.outputs.carried != 'yes'
         env:
           GH_TOKEN: ${{ steps.token.outputs.token }}
           PIN: ${{ steps.behind.outputs.pin }}
