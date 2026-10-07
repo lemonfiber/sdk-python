@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Final, Self
 import aiohttp
 
 from lemonfiber._protocol import operation
-from lemonfiber._protocol.calls import DEFAULT_TIMEOUT, Answer, Call, with_credential
+from lemonfiber._protocol.calls import DEFAULT_TIMEOUT, Answer, Call, received, with_credential
 from lemonfiber._protocol.following import DEFAULT_EVERY, job_name, next_wait
 from lemonfiber._protocol.refusals import CERTIFICATE_REFUSED, NOT_ANSWERING, opening_refusal
 from lemonfiber._protocol.retry import Attempts
@@ -125,8 +125,7 @@ async def attempt(
     except aiohttp.ClientError, TimeoutError:
         failure = UnreachableError(NOT_ANSWERING)
     else:
-        headers = {name.lower(): value for name, value in response.headers.items()}
-        return Answer(response.status, headers, body)
+        return received(response.status, response.headers, body)
     raise failure
 
 
@@ -293,7 +292,7 @@ class AsyncClient:
         `reconnects` attempts in a row have failed.
         """
         following = Following(self._credential, silence=silence, reconnects=reconnects, first_wait=first_wait)
-        connect = aiohttp.ClientTimeout(total=None, sock_connect=self._timeout)
+        connect = aiohttp.ClientTimeout(sock_connect=self._timeout)
         return AsyncStream(self._session, self._address, self._tls, following, connect)
 
     async def aclose(self) -> None:
@@ -393,8 +392,7 @@ class AsyncStream:
             )
             if response.status == OPENED:
                 return response
-            headers = {name.lower(): value for name, value in response.headers.items()}
-            answer = Answer(response.status, headers, await response.read())
+            answer = received(response.status, response.headers, await response.read())
         except aiohttp.ServerFingerprintMismatch, aiohttp.ClientSSLError:
             failure = CertificateRefusedError(CERTIFICATE_REFUSED)
         except aiohttp.ClientError, TimeoutError:

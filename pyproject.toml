@@ -96,7 +96,7 @@ do_not_mutate_patterns = ["\\bcast\\("]
 
 [tool.lemonfiber.mutation]
 # The share of mutants the suite must tell apart from the code, as a percentage.
-minimum-score = 90
+minimum-score = 100
 
 [tool.lemonfiber.backward-compatibility]
 # Each break of the public surface a change makes on purpose, as the check
