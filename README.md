@@ -82,4 +82,7 @@ uv run just ci      # lint, strict types, the contract diff, the suite at 100% l
 
 Mutation testing, the backward-compatibility check and the organisation's shared workflows run in CI.
 
+A change that touches only documentation runs none of the Python gates:
+`scripts/the_code_a_change_touches.py` decides which paths are code.
+
 Hippocratic License 3.0. See [LICENSE](LICENSE).
