@@ -98,6 +98,13 @@ do_not_mutate_patterns = ["\\bcast\\("]
 # The share of mutants the suite must tell apart from the code, as a percentage.
 minimum-score = 90
 
+[tool.lemonfiber.backward-compatibility]
+# Each break of the public surface a change makes on purpose, as the check
+# names it: the symbol, the kind of break, and why. A listed break passes for
+# that symbol and that kind alone, where a commit since the consumer's pin is
+# marked breaking; every other break fails.
+accepted = []
+
 [tool.lemonfiber.line-cap]
 # The most lines a file may hold, as the core holds its own. A source file, the
 # generated modules included: the generator writes a module that would hold

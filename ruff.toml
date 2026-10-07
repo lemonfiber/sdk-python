@@ -38,6 +38,9 @@ exclude = ["src/lemonfiber/_generated/**"]
 # The one subprocess the generator starts: the formatter the lockfile pins,
 # given only the files this run of the generator wrote.
 "scripts/contract_generator/formatting.py" = ["S603"]
+# The one subprocess the compatibility check starts: git, found on the path,
+# asked for the messages of commits this repository already holds.
+"scripts/backward_compat.py" = ["S603"]
 
 [lint.pydocstyle]
 convention = "pep257"
