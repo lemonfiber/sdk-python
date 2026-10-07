@@ -11,6 +11,7 @@ from .envelope import Envelope
 from .kinds import (
     AdmissionEnvelope,
     AdoptionEnvelope,
+    AlertEnvelope,
     AlertsEnvelope,
     ArchivesEnvelope,
     BackupEnvelope,
@@ -91,6 +92,8 @@ class KindNarrowing(typing.Protocol):
     def __call__(self, envelope: Envelope, kind: typing.Literal["admission"], /) -> AdmissionEnvelope: ...
     @typing.overload
     def __call__(self, envelope: Envelope, kind: typing.Literal["adoption"], /) -> AdoptionEnvelope: ...
+    @typing.overload
+    def __call__(self, envelope: Envelope, kind: typing.Literal["alert"], /) -> AlertEnvelope: ...
     @typing.overload
     def __call__(self, envelope: Envelope, kind: typing.Literal["alerts"], /) -> AlertsEnvelope: ...
     @typing.overload
