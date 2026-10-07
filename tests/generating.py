@@ -1,9 +1,10 @@
 # Copyright (c) 2026 NightWorksIO
-"""Artefacts written as the core writes them, and the generated package imported from wherever it was written."""
+"""Artefacts written as the core writes them, in either layout, and the generated package imported from wherever it was written."""
 
 import importlib.util
 import json
 import sys
+import typing
 from typing import TYPE_CHECKING
 
 import pytest
@@ -63,6 +64,55 @@ def write(root: pathlib.Path, whole: object, stamp: str | None = "v1.0.0") -> No
     (root / "contract" / "web-api.contract.json").write_text(json.dumps(whole), encoding="utf-8")
     if stamp is not None:
         (root / "contract" / "VERSION").write_text(f"{stamp}\n", encoding="utf-8")
+
+
+LISTED = {"key_callable": "key-callable.json", "reads": "reads.json", "refusals": "refusals.json"}
+"""Each list the directory's index names, and the file the core writes it to."""
+
+
+def relinked(node: object, prefix: str) -> object:
+    """Return a schema with each `#/$defs/<Name>` reference spelled as the path `<prefix><Name>.json`."""
+    if isinstance(node, list):
+        return [relinked(item, prefix) for item in typing.cast("list[object]", node)]
+    if not isinstance(node, dict):
+        return node
+    named = typing.cast("dict[str, object]", node)
+    return {
+        key: f"{prefix}{str(value).removeprefix('#/$defs/')}.json"
+        if key == "$ref"
+        else relinked(value, prefix)
+        for key, value in named.items()
+    }
+
+
+def exploded(whole: dict[str, object]) -> dict[str, object]:
+    """Return the files the directory layout holds for an artefact, by their path beneath `contract/web-api/`."""
+    files: dict[str, object] = {}
+    kinds: dict[str, str] = {}
+    index: dict[str, object] = {"api_version": whole["api_version"], "kinds": kinds}
+    for listed, file in LISTED.items():
+        if listed in whole:
+            index[listed] = file
+            files[file] = whole[listed]
+    for name, schema in typing.cast("dict[str, dict[str, object]]", whole["kinds"]).items():
+        envelope = {key: value for key, value in schema.items() if key != "$defs"}
+        kinds[name] = f"kinds/{name}.json"
+        files[kinds[name]] = relinked(envelope, "../defs/")
+        definitions = typing.cast("dict[str, dict[str, object]]", schema.get("$defs", {}))
+        for defined, definition in definitions.items():
+            spelled = typing.cast("dict[str, object]", relinked(definition, ""))
+            files[f"defs/{defined}.json"] = {"$schema": schema.get("$schema"), **spelled}
+    files["index.json"] = index
+    return files
+
+
+def write_directory(root: pathlib.Path, whole: dict[str, object], stamp: str = "v1.0.0") -> None:
+    """Vendor an artefact under `root` as the directory layout holds one."""
+    for file, held in exploded(whole).items():
+        path = root / "contract" / "web-api" / file
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(held, indent=2), encoding="utf-8")
+    (root / "contract" / "VERSION").write_text(f"{stamp}\n", encoding="utf-8")
 
 
 def load(root: pathlib.Path) -> types.ModuleType:

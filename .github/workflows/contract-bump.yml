@@ -12,9 +12,9 @@
 name: contract-bump
 
 on:
-  # How the server asks. `contract-moved` there dispatches this whenever
-  # `contract/web-api.contract.json` changes, so the cadence is the change
-  # rather than the calendar.
+  # How the server asks. `contract-moved` there dispatches this on `main`
+  # whenever the contract changes, so the cadence is the change rather than the
+  # calendar.
   workflow_dispatch:
   # The floor, for a dispatch that never arrived.
   schedule:
@@ -63,55 +63,53 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Is the vendored artefact behind at all
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+
+      - name: Is the vendored contract behind at all
         id: behind
         env:
           GH_TOKEN: ${{ steps.token.outputs.token }}
         run: |
           set -euo pipefail
 
-          # The artefact decides, not the revision.
+          # The contract decides, not the revision.
           #
-          # `contract/VERSION` records which commit the vendored bytes came
+          # `contract/VERSION` records which commit the vendored files came
           # from, and the server's main moves for every commit — a README, a
           # workflow, a test. Comparing the two says "behind" on all of them,
           # and each would open a pull request whose only change is the
           # revision stamp. That is the noise this workflow exists to remove,
           # arriving from the other direction.
           #
-          # So this compares what `contract-drift` compares: the parsed
-          # artefact. When the bytes match, there is nothing to take, and the
-          # stamp staying where it is remains true — it says where the bytes
+          # So this compares what `contract-drift` compares: the contract, file
+          # by file, as the JSON each holds, in whichever layout the server's
+          # main holds it. When they match, there is nothing to take, and the
+          # stamp staying where it is remains true — it says where the files
           # came from, and they came from there.
           pin="$(tr -d '[:space:]' < contract/VERSION)"
           head="$(gh api "repos/${SERVER}/commits/main" --jq .sha)"
           echo "pin=${pin}" >> "$GITHUB_OUTPUT"
           echo "head=${head}" >> "$GITHUB_OUTPUT"
 
-          # `-L` follows redirects, and a redirect may point anywhere. These
-          # refuse any hop that is not HTTPS, so what is fetched cannot be
-          # downgraded.
-          curl -fsSL --proto "=https" --proto-redir "=https" --retry 3 -o served.json \
-            "https://raw.githubusercontent.com/${SERVER}/${head}/contract/web-api.contract.json"
-
-          if VENDORED=contract/web-api.contract.json SERVED=served.json python3 -c '
-          import json, os, sys
-          vendored = json.load(open(os.environ["VENDORED"]))
-          served = json.load(open(os.environ["SERVED"]))
-          sys.exit(0 if vendored == served else 1)
-          '; then
-            echo "moved=no" >> "$GITHUB_OUTPUT"
-            echo "The vendored artefact matches the one ${head} serves; nothing to take."
-            echo "## The vendored contract is what the server describes" >>"${GITHUB_STEP_SUMMARY:-/dev/null}"
-          else
-            echo "moved=yes" >> "$GITHUB_OUTPUT"
-            echo "The artefact has changed since ${pin}; the server's main is ${head}."
-          fi
-
-          rm -f served.json
-
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
-        if: steps.behind.outputs.moved == 'yes'
+          # 0: the copy is what the server serves. 1: it differs, and the
+          # files that differ are printed. Anything else: the server's main
+          # could not be read, which fails the run rather than guessing.
+          compared=0
+          uv run --locked --no-build python -m scripts.contract_drift "${head}" || compared=$?
+          case "$compared" in
+            0)
+              echo "moved=no" >> "$GITHUB_OUTPUT"
+              echo "The vendored contract matches the one ${head} serves; nothing to take."
+              echo "## The vendored contract is what the server describes" >>"${GITHUB_STEP_SUMMARY:-/dev/null}"
+              ;;
+            1)
+              echo "moved=yes" >> "$GITHUB_OUTPUT"
+              echo "The contract has changed since ${pin}; the server's main is ${head}."
+              ;;
+            *)
+              exit "$compared"
+              ;;
+          esac
 
       - name: Take the contract and regenerate against it
         id: build
@@ -141,13 +139,16 @@ jobs:
         run: |
           set -euo pipefail
 
-          # What the sync and the generator wrote, and nothing else. The build
-          # before this ran the suite, and this commit is made with a token that
-          # can write here, so any change outside `contract/` and the generated
-          # package refuses the whole commit rather than riding along with it;
-          # so does a deletion or a rename, which a commit of additions cannot
-          # carry. Captured rather than piped onwards, so a refusal stops the
-          # step under `pipefail`.
+          # What the sync and the generator wrote or removed, and nothing else.
+          # The build before this ran the suite, and this commit is made with a
+          # token that can write here, so any change outside `contract/` and the
+          # generated package refuses the whole commit rather than riding along
+          # with it; so does a rename, which syncing and generating never make.
+          # A removal is carried: a contract that changes layout removes the
+          # files of the old one, and a definition the server drops removes its
+          # file. Each line is `A <path>` for a file written and `D <path>` for
+          # one removed. Captured rather than piped onwards, so a refusal stops
+          # the step under `pipefail`.
           git status --porcelain=v1 -z --untracked-files=all > "${RUNNER_TEMP}/status"
           changed="$(uv run --locked --no-build python -m scripts.what_the_bump_takes < "${RUNNER_TEMP}/status")"
           printf '%s\n' "$changed"
@@ -194,7 +195,7 @@ jobs:
           import sys
 
           repo, branch, base, head, pin, note = sys.argv[1:7]
-          changed = os.environ["CHANGED"].splitlines()
+          changed = [line.split(" ", 1) for line in os.environ["CHANGED"].splitlines()]
 
           print(json.dumps({
               "query": (
@@ -228,8 +229,14 @@ jobs:
                                       open(name, "rb").read()
                                   ).decode(),
                               }
-                              for name in changed
-                          ]
+                              for change, name in changed
+                              if change == "A"
+                          ],
+                          "deletions": [
+                              {"path": name}
+                              for change, name in changed
+                              if change == "D"
+                          ],
                       },
                   }
               },

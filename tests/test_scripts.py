@@ -16,12 +16,13 @@ from scripts import (
     mutation_score,
     what_the_bump_takes,
 )
+from tests.serving import SINGLE, SPLIT, tarball
 
 if TYPE_CHECKING:
     import pathlib
 
 REVISION = "d2bf74b950a9f6fb73f2bcd60e2d8adf85337cd6"
-SERVED = json.dumps({"api_version": 1, "kinds": {"pull": {}, "start": {}}}).encode()
+SERVED = tarball(SINGLE)
 
 
 def test_a_revision_is_vendored_beside_the_revision_it_came_from(tmp_path: pathlib.Path) -> None:
@@ -33,12 +34,42 @@ def test_a_revision_is_vendored_beside_the_revision_it_came_from(tmp_path: pathl
 
     assert contract_sync.run([REVISION], tmp_path, take) == 0
     assert asked == [REVISION]
-    assert (tmp_path / "contract/web-api.contract.json").read_bytes() == SERVED
+    vendored = json.loads((tmp_path / "contract/web-api.contract.json").read_bytes())
+    assert vendored == SINGLE["contract/web-api.contract.json"]
     assert (tmp_path / "contract/VERSION").read_text(encoding="utf-8") == f"{REVISION}\n"
+    assert sorted(path.name for path in (tmp_path / "contract").iterdir()) == [
+        "VERSION",
+        "web-api.contract.json",
+    ]
+
+
+def test_a_revision_holding_the_directory_is_vendored_as_the_directory_and_the_single_file_removed(
+    tmp_path: pathlib.Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert contract_sync.run([REVISION], tmp_path, lambda _: SERVED) == 0
+    (tmp_path / "contract/web-api/defs").mkdir(parents=True)
+    (tmp_path / "contract/web-api/defs/Dropped.json").write_text("{}", encoding="utf-8")
+    assert contract_sync.run([REVISION], tmp_path, lambda _: tarball({**SPLIT, **SINGLE})) == 0
+    held = sorted(path.relative_to(tmp_path).as_posix() for path in tmp_path.rglob("*") if path.is_file())
+    assert held == sorted(["contract/VERSION", *SPLIT])
+    for path, written in SPLIT.items():
+        assert json.loads((tmp_path / path).read_bytes()) == written
+    assert (
+        "2 kinds, from d2bf74b950a9f6fb73f2bcd60e2d8adf85337cd6 as contract/web-api."
+        in capsys.readouterr().out
+    )
+
+
+def test_a_revision_holding_the_single_file_removes_a_vendored_directory(tmp_path: pathlib.Path) -> None:
+    assert contract_sync.run([REVISION], tmp_path, lambda _: tarball(SPLIT)) == 0
+    assert contract_sync.run([REVISION], tmp_path, lambda _: SERVED) == 0
+    assert not (tmp_path / "contract/web-api").exists()
+    assert (tmp_path / "contract/web-api.contract.json").is_file()
 
 
 @pytest.mark.parametrize("arguments", [[], ["main"], ["d2bf74b"], ["v1.0"]])
-def test_a_revision_that_names_no_one_artefact_is_refused(
+def test_a_revision_that_names_no_one_contract_is_refused(
     tmp_path: pathlib.Path,
     arguments: list[str],
 ) -> None:
@@ -46,21 +77,56 @@ def test_a_revision_that_names_no_one_artefact_is_refused(
     assert not (tmp_path / "contract").exists()
 
 
+INDEX = "contract/web-api/index.json"
+
+
 @pytest.mark.parametrize(
-    "served",
-    [b"{", b"[]", json.dumps({"api_version": 1}).encode(), json.dumps({"kinds": {}}).encode()],
+    ("served", "said"),
+    [
+        (b"{", "is not a gzipped tarball"),
+        (
+            tarball({"contract/plugin-manifest.schema.json": {}}),
+            "holds neither contract/web-api/index.json nor",
+        ),
+        (tarball({"contract/web-api.contract.json": b"{"}), "contract/web-api.contract.json at "),
+        (tarball({"contract/web-api.contract.json": []}), "contract/web-api.contract.json at d2bf74b9"),
+        (tarball({"contract/web-api.contract.json": {"api_version": 1}}), "names no api_version or no kinds"),
+        (tarball({"contract/web-api.contract.json": {"kinds": {}}}), "names no api_version or no kinds"),
+        (tarball({**SPLIT, "contract/web-api/defs/Code.json": b"{"}), "contract/web-api/defs/Code.json at"),
+        (tarball({**SPLIT, INDEX: []}), "contract/web-api/index.json at d2bf74b9"),
+        (
+            tarball({**SPLIT, INDEX: {"api_version": 1, "kinds": {"pull": "kinds/push.json"}}}),
+            '"kinds/push.json"',
+        ),
+        (tarball({**SPLIT, INDEX: {"api_version": 1, "kinds": {"pull": 3}}}), "index.json at d2bf74b9"),
+        (
+            tarball({**SPLIT, INDEX: {"api_version": 1, "kinds": {}, "reads": "../reads.json"}}),
+            '"../reads.json"',
+        ),
+        (
+            tarball(SPLIT, links=("contract/web-api/defs/Link.json",)),
+            "defs/Link.json, which is not a plain file",
+        ),
+        (
+            tarball({**SPLIT, "contract/web-api/../web-api/defs/A.json": {}}),
+            "web-api/../web-api/defs/A.json, which",
+        ),
+    ],
 )
-def test_what_is_not_an_artefact_is_refused_and_nothing_is_written(
+def test_what_is_not_a_contract_is_refused_and_nothing_is_written(
     tmp_path: pathlib.Path,
+    capsys: pytest.CaptureFixture[str],
     served: bytes,
+    said: str,
 ) -> None:
-    assert contract_sync.run(["v1.0.0"], tmp_path, lambda _: served) == 1
+    assert contract_sync.run([REVISION], tmp_path, lambda _: served) == 1
     assert not (tmp_path / "contract").exists()
+    assert said in capsys.readouterr().err
 
 
 def test_a_revision_serving_nothing_is_refused(tmp_path: pathlib.Path) -> None:
     def take(revision: str) -> bytes:
-        message = f"{revision} serves no artefact"
+        message = f"{revision} serves no tree"
         raise contract_sync.SyncRefusedError(message)
 
     assert contract_sync.run(["v1.0.0"], tmp_path, take) == 1
@@ -150,16 +216,16 @@ def refused(code: int) -> urllib.error.HTTPError:
     )
 
 
-def test_an_artefact_is_fetched_from_the_revision_it_names(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_tree_is_fetched_from_the_revision_it_names(monkeypatch: pytest.MonkeyPatch) -> None:
     opener = opening(monkeypatch, Served(SERVED))
     assert contract_sync.fetch(REVISION) == SERVED
-    assert opener.asked == [contract_sync.SERVED.format(revision=REVISION)]
+    assert opener.asked == [f"https://codeload.github.com/lemonfiber/lemonfiber/tar.gz/{REVISION}"]
     assert opener.timeouts == [contract_sync.TIMEOUT_SECONDS]
 
 
-def test_an_artefact_that_cannot_be_reached_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_tree_that_cannot_be_reached_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
     opening(monkeypatch, urllib.error.URLError("unreachable"))
-    with pytest.raises(contract_sync.SyncRefusedError, match=f"{REVISION} serves no artefact"):
+    with pytest.raises(contract_sync.SyncRefusedError, match=f"{REVISION} serves no tree"):
         contract_sync.fetch(REVISION)
 
 
@@ -198,11 +264,15 @@ def test_the_minimum_is_the_projects() -> None:
     assert mutation_score.minimum(mutation_score.ROOT) > 0
 
 
-def test_a_bump_takes_what_sync_and_generation_wrote(capsys: pytest.CaptureFixture[str]) -> None:
-    status = " M contract/VERSION\0?? src/lemonfiber/_generated/more.py\0M  contract/web-api.contract.json\0"
+def test_a_bump_takes_what_sync_and_generation_wrote_and_removed(capsys: pytest.CaptureFixture[str]) -> None:
+    status = (
+        " M contract/VERSION\0?? src/lemonfiber/_generated/more.py\0M  contract/web-api/index.json\0"
+        " D contract/web-api.contract.json\0D  src/lemonfiber/_generated/gone.py\0"
+    )
     assert what_the_bump_takes.run(status) == 0
     assert capsys.readouterr().out == (
-        "contract/VERSION\ncontract/web-api.contract.json\nsrc/lemonfiber/_generated/more.py\n"
+        "A contract/VERSION\nA contract/web-api/index.json\nA src/lemonfiber/_generated/more.py\n"
+        "D contract/web-api.contract.json\nD src/lemonfiber/_generated/gone.py\n"
     )
 
 
@@ -212,21 +282,19 @@ def test_a_bump_takes_what_sync_and_generation_wrote(capsys: pytest.CaptureFixtu
         (" M .github/workflows/ci.yml\0", "changed outside what a bump takes: .github/workflows/ci.yml"),
         ("?? README.md\0", "changed outside what a bump takes: README.md"),
         (" M contract-notes.txt\0", "changed outside what a bump takes: contract-notes.txt"),
-        (
-            " D contract/VERSION\0",
-            "deleted contract/VERSION, and the commit a bump makes carries additions only",
-        ),
-        (
-            "D  contract/VERSION\0",
-            "deleted contract/VERSION, and the commit a bump makes carries additions only",
-        ),
+        (" D README.md\0", "changed outside what a bump takes: README.md"),
+        ("D  contract-notes.txt\0", "changed outside what a bump takes: contract-notes.txt"),
         (
             "R  contract/new\0.github/workflows/ci.yml\0",
-            "moved .github/workflows/ci.yml to contract/new, and the commit a bump makes carries additions only",
+            "moved .github/workflows/ci.yml to contract/new, and syncing and generating never move a file",
         ),
         (
             "UU contract/VERSION\0",
             "contract/VERSION stands as 'UU' in git's status, which syncing and generating never leave",
+        ),
+        (
+            "UD contract/VERSION\0",
+            "contract/VERSION stands as 'UD' in git's status, which syncing and generating never leave",
         ),
         ("?? contract/a\nb\0", 'a name that is not one printable line: "contract/a\\nb"'),
         ("", "nothing changed on disk, so there is nothing to commit"),

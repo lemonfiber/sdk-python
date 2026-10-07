@@ -23,7 +23,7 @@ others. A client that disagrees with the contract is wrong.
 ## The rules you cannot break
 
 - **`src/lemonfiber/_generated/` is not edited by hand.** It is produced from the
-  vendored `contract/web-api.contract.json` (`ARCH-R56`, `ARCH-R58`).
+  contract vendored under `contract/` (`ARCH-R56`, `ARCH-R58`).
   `just contract-check` regenerates and fails on any diff. No written module
   declares a response shape; the architecture tests refuse a `TypedDict` outside
   the generated tree.

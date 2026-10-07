@@ -2,4 +2,5 @@
 
 src/lemonfiber/_generated/** linguist-generated=true
 contract/web-api.contract.json linguist-generated=true
+contract/web-api/** linguist-generated=true
 uv.lock linguist-generated=true

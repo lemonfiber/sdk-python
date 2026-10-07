@@ -1,15 +1,16 @@
 # Copyright (c) 2026 NightWorksIO
 """The generated shapes say what the vendored artefact says, and nothing of their own."""
 
-import json
-import pathlib
+from typing import Any, cast
 
 import lemonfiber
 from lemonfiber import _generated as generated
 from lemonfiber import contract
+from scripts.contract_generator import ROOT
+from scripts.contract_generator.vendored import read_artefact
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
-ARTEFACT = json.loads((ROOT / "contract/web-api.contract.json").read_text(encoding="utf-8"))
+ARTEFACT = cast("dict[str, Any]", read_artefact(ROOT)[0])
+"""The vendored contract, in whichever layout `contract/` holds it, as decoded JSON."""
 
 
 def test_every_kind_the_artefact_describes_is_a_kind_here() -> None:
