@@ -134,12 +134,14 @@ def key_callable_module(callable_by_key: Sequence[ByKey]) -> Module:
         '    """Whether calling it disturbs the running system."""',
         "    rehearsal: bool",
         '    """Whether it takes `dry_run`, so it can be rehearsed before the real call is offered."""',
+        "    idempotent: bool",
+        '    """Whether calling it again with the same arguments leaves the stack as calling it once did."""',
         "",
         "",
         "KEY_CALLABLE: typing.Final[typing.Mapping[KeyCallableAction, KeyCallable]] = types.MappingProxyType({",
     ]
     body.extend(
-        f"    {json.dumps(one.action)}: KeyCallable({one.disturbs}, {one.rehearsal}),"
+        f"    {json.dumps(one.action)}: KeyCallable({one.disturbs}, {one.rehearsal}, {one.idempotent}),"
         for one in callable_by_key
     )
     body.extend(

@@ -35,7 +35,7 @@ SCREAMING_SNAKE = re.compile(r"^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$")
 ACTION = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
 """An action's name, as `POST /api/actions/<action>` spells one: `downloads-pause`."""
 
-CALLABLE_FIELDS = ("action", "disturbs", "rehearsal")
+CALLABLE_FIELDS = ("action", "disturbs", "rehearsal", "idempotent")
 """Everything the contract says of an action a key may call, in that order. Anything else is refused, not dropped."""
 
 REFUSAL_STATUSES = range(400, 600)
@@ -114,6 +114,7 @@ class ByKey:
     action: str
     disturbs: bool
     rehearsal: bool
+    idempotent: bool
 
 
 def read_by_key(at: int, entry: object) -> tuple[ByKey | None, list[str]]:
@@ -121,24 +122,21 @@ def read_by_key(at: int, entry: object) -> tuple[ByKey | None, list[str]]:
     listed = object_of(entry)
     if listed is None:
         return None, [f"entry {at}: not an object"]
-    action, disturbs, rehearsal = (listed.get(one) for one in CALLABLE_FIELDS)
+    action = listed.get(CALLABLE_FIELDS[0])
+    flags = [listed.get(one) for one in CALLABLE_FIELDS[1:]]
     wrong: list[str] = []
     if not isinstance(action, str) or not ACTION.fullmatch(action):
         wrong.append(f"entry {at}: action {json.dumps(action)} is not an action's name")
-    for flag, value in zip(CALLABLE_FIELDS[1:], (disturbs, rehearsal), strict=True):
+    for flag, value in zip(CALLABLE_FIELDS[1:], flags, strict=True):
         if not isinstance(value, bool):
             wrong.append(f"entry {at}: {flag} {json.dumps(value)} is not true or false")
     unread = sorted(set(listed) - set(CALLABLE_FIELDS))
     if unread:
         wrong.append(f"entry {at}: carries {', '.join(unread)}, which this generator does not read")
-    if (
-        wrong
-        or not isinstance(action, str)
-        or not isinstance(disturbs, bool)
-        or not isinstance(rehearsal, bool)
-    ):
+    if wrong or not isinstance(action, str):
         return None, wrong
-    return ByKey(action, disturbs, rehearsal), []
+    disturbs, rehearsal, idempotent = (value is True for value in flags)
+    return ByKey(action, disturbs, rehearsal, idempotent), []
 
 
 def checked(artefact: Mapping[str, object], stamp: str) -> None:
