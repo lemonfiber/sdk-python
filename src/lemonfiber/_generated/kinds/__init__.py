@@ -7,6 +7,7 @@ and CI fails on any difference.
 
 from . import admission as _admission
 from . import adoption as _adoption
+from . import alert as _alert
 from . import alerts as _alerts
 from . import archives as _archives
 from . import backup as _backup
@@ -80,6 +81,7 @@ from . import word as _word
 
 from .admission import *
 from .adoption import *
+from .alert import *
 from .alerts import *
 from .archives import *
 from .backup import *
@@ -154,6 +156,7 @@ from .word import *
 __all__: list[str] = []
 __all__ += _admission.__all__
 __all__ += _adoption.__all__
+__all__ += _alert.__all__
 __all__ += _alerts.__all__
 __all__ += _archives.__all__
 __all__ += _backup.__all__

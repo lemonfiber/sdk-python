@@ -10,6 +10,7 @@ import typing
 from .kinds import (
     AdmissionEnvelope,
     AdoptionEnvelope,
+    AlertEnvelope,
     AlertsEnvelope,
     ArchivesEnvelope,
     BackupEnvelope,
@@ -88,6 +89,7 @@ CONTRACT_API_VERSION: typing.Final = 1
 type Kind = typing.Literal[
     "admission",
     "adoption",
+    "alert",
     "alerts",
     "archives",
     "backup",
@@ -167,6 +169,7 @@ KINDS: typing.Final[frozenset[Kind]] = frozenset(typing.get_args(Kind.__value__)
 type Envelope = (
     AdmissionEnvelope
     | AdoptionEnvelope
+    | AlertEnvelope
     | AlertsEnvelope
     | ArchivesEnvelope
     | BackupEnvelope

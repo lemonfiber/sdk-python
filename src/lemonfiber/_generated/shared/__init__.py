@@ -9,6 +9,8 @@ from . import (
     adoption__beside__config__import___replacement as _adoption__beside__config__import___replacement,
 )
 from . import adoption__migration as _adoption__migration
+from . import alert__dashboard as _alert__dashboard
+from . import alert__dashboard__doctor__error__plugins as _alert__dashboard__doctor__error__plugins
 from . import backup__restore as _backup__restore
 from . import bandwidth__pausing as _bandwidth__pausing
 from . import beside__migration as _beside__migration
@@ -17,7 +19,6 @@ from . import (
     config__credentials__doctor__outbound__plugins__wiring__wizard as _config__credentials__doctor__outbound__plugins__wiring__wizard,
 )
 from . import config__wizard as _config__wizard
-from . import dashboard__doctor__error__plugins as _dashboard__doctor__error__plugins
 from . import dashboard__front_door as _dashboard__front_door
 from . import dashboard__household as _dashboard__household
 from . import dashboard__household__invitation as _dashboard__household__invitation
@@ -46,13 +47,14 @@ from . import update__version as _update__version
 
 from .adoption__beside__config__import___replacement import *
 from .adoption__migration import *
+from .alert__dashboard import *
+from .alert__dashboard__doctor__error__plugins import *
 from .backup__restore import *
 from .bandwidth__pausing import *
 from .beside__migration import *
 from .catalogue__dashboard__lifecycle__status import *
 from .config__credentials__doctor__outbound__plugins__wiring__wizard import *
 from .config__wizard import *
-from .dashboard__doctor__error__plugins import *
 from .dashboard__front_door import *
 from .dashboard__household import *
 from .dashboard__household__invitation import *
@@ -82,13 +84,14 @@ from .update__version import *
 __all__: list[str] = []
 __all__ += _adoption__beside__config__import___replacement.__all__
 __all__ += _adoption__migration.__all__
+__all__ += _alert__dashboard.__all__
+__all__ += _alert__dashboard__doctor__error__plugins.__all__
 __all__ += _backup__restore.__all__
 __all__ += _bandwidth__pausing.__all__
 __all__ += _beside__migration.__all__
 __all__ += _catalogue__dashboard__lifecycle__status.__all__
 __all__ += _config__credentials__doctor__outbound__plugins__wiring__wizard.__all__
 __all__ += _config__wizard.__all__
-__all__ += _dashboard__doctor__error__plugins.__all__
 __all__ += _dashboard__front_door.__all__
 __all__ += _dashboard__household.__all__
 __all__ += _dashboard__household__invitation.__all__
