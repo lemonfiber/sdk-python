@@ -37,6 +37,8 @@ class Read(enum.StrEnum):
     """Answers with `household`; takes `member` and `defaults`."""
     HELD = "held"
     """Answers with `held`; takes `member`, `defaults` and `most`."""
+    PLAYING = "playing"
+    """Answers with `playing`; takes `member`."""
     HOSTING = "hosting"
     """Answers with `hosting`."""
     FRONT_DOOR = "front-door"
@@ -132,6 +134,7 @@ READS: typing.Final[typing.Mapping[Read, Readable]] = types.MappingProxyType(
             ("held",),
             (ReadParameter("member", False), ReadParameter("defaults", False), ReadParameter("most", False)),
         ),
+        Read.PLAYING: Readable(("playing",), (ReadParameter("member", False),)),
         Read.HOSTING: Readable(("hosting",), ()),
         Read.FRONT_DOOR: Readable(("front-door",), ()),
         Read.NEWS: Readable(("news-items",), ()),

@@ -44,6 +44,7 @@ from . import news_items as _news_items
 from . import outbound as _outbound
 from . import pairing as _pairing
 from . import pausing as _pausing
+from . import playing as _playing
 from . import plugins as _plugins
 from . import preview as _preview
 from . import provenance as _provenance
@@ -116,6 +117,7 @@ from .news_items import *
 from .outbound import *
 from .pairing import *
 from .pausing import *
+from .playing import *
 from .plugins import *
 from .preview import *
 from .provenance import *
@@ -189,6 +191,7 @@ __all__ += _news_items.__all__
 __all__ += _outbound.__all__
 __all__ += _pairing.__all__
 __all__ += _pausing.__all__
+__all__ += _playing.__all__
 __all__ += _plugins.__all__
 __all__ += _preview.__all__
 __all__ += _provenance.__all__

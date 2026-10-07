@@ -28,6 +28,7 @@ class DashboardEnvelope(typing.TypedDict):
     api_version: int
     data: Snapshot
     host: typing.NotRequired[str | None]
+    job: typing.NotRequired[str | None]
     kind: typing.Literal["dashboard"]
 
 
