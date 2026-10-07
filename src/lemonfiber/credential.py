@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     import datetime
 
 CREDENTIAL_HEADER: Final = "X-Lemonfiber-Token"
-"""The one header every credential travels in, and never a URL (`ARCH-R52`, `ARCH-R59`, `ARCH-R76`)."""
+"""The one header every credential travels in, and never a URL."""
 
 VISIBLE: Final = re.compile(r"^[\x21-\x7e]+$")
 """What a credential is written in: visible ASCII, nothing a header could be split on."""

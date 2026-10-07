@@ -2,8 +2,10 @@
 """The rules the tree is built to: generated stays generated, transports stay behind the client, files stay short."""
 
 import ast
+import io
 import pathlib
 import re
+import tokenize
 
 import pytest
 
@@ -26,6 +28,15 @@ SOURCES = (ROOT / "src", ROOT / "scripts")
 TESTS = ROOT / "tests"
 """Where every file is held to the test cap."""
 
+IDENTIFIER = re.compile(r"\b[A-Z][A-Z0-9]*-R\d+\b")
+"""A requirement identifier, which belongs in a commit trailer and a pull request, not beside the code."""
+
+REASONING = re.compile(
+    r"^\s*(?:because|we\b|the reason|this is why|originally|it turns out|note that|arguably)",
+    re.IGNORECASE,
+)
+"""How a line opens that argues rather than states what a thing is or does."""
+
 SUPPRESSIONS = re.compile(r"#\s*(type:\s*ignore|pyright:|noqa|pragma:\s*no\s*(cover|branch))", re.IGNORECASE)
 
 
@@ -43,6 +54,24 @@ def imported(path: pathlib.Path) -> set[str]:
         elif isinstance(node, ast.ImportFrom) and node.module is not None and node.level == 0:
             names.add(node.module.split(".")[0])
     return names
+
+
+def prose(path: pathlib.Path) -> list[tuple[int, str]]:
+    """Return every line of a file's comments and docstrings, with the line it stands on."""
+    text = path.read_text(encoding="utf-8")
+    lines = [
+        (token.start[0], token.string.lstrip("#"))
+        for token in tokenize.generate_tokens(io.StringIO(text).readline)
+        if token.type == tokenize.COMMENT
+    ]
+    for node in ast.walk(ast.parse(text)):
+        if (
+            isinstance(node, ast.Expr)
+            and isinstance(node.value, ast.Constant)
+            and isinstance(node.value.value, str)
+        ):
+            lines.extend((node.lineno + at, line) for at, line in enumerate(node.value.value.splitlines()))
+    return lines
 
 
 def written() -> list[pathlib.Path]:
@@ -129,3 +158,25 @@ def test_a_files_lines_are_counted_as_it_holds_them() -> None:
     assert lines_in("one\ntwo\n") == 2
     assert lines_in("one\ntwo") == 2
     assert lines_in("") == 0
+
+
+WRITTEN_ANYWHERE = [*written(), *python_files(ROOT / "scripts", TESTS)]
+"""Every file written rather than generated: the package's, the scripts' and the tests'."""
+
+
+@pytest.mark.parametrize("path", WRITTEN_ANYWHERE, ids=str)
+def test_no_comment_cites_a_requirement(path: pathlib.Path) -> None:
+    for number, line in prose(path):
+        assert not IDENTIFIER.search(line), f"{path}:{number} cites a requirement; cite it in the commit"
+
+
+@pytest.mark.parametrize("path", WRITTEN_ANYWHERE, ids=str)
+def test_no_comment_argues(path: pathlib.Path) -> None:
+    for number, line in prose(path):
+        assert not REASONING.match(line), f"{path}:{number} argues; say what it is or does"
+
+
+def test_comments_and_docstrings_are_read_line_by_line(tmp_path: pathlib.Path) -> None:
+    sample = tmp_path / "sample.py"
+    sample.write_text('"""One.\n\nTwo."""\n\nx = 1  # three\n', encoding="utf-8")
+    assert prose(sample) == [(5, " three"), (1, "One."), (2, ""), (3, "Two.")]
