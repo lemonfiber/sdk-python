@@ -1,0 +1,35 @@
+# What this repository implements, one row per requirement (OPS-R74).
+#
+# `done` means the requirement is met in full by what is here, `partial` that this
+# repository holds its part and the rest lives elsewhere, `open` that nothing here
+# meets it yet. The release gate and the no-stubs gate read this file; a pull
+# request that changes whether a requirement is met changes its row.
+#
+# These are the client's requirements of the web API contract. Where a requirement
+# also binds the server or the artefact the core publishes (the heartbeat, event
+# ids, publishing the artefact, listing refusal codes), this client's half is here
+# and the row is partial.
+
+requirement = [
+  { id = "ARCH-R51", state = "done", evidence = ["src/lemonfiber/stream.py", "tests/test_following.py::test_a_break_names_how_long_it_was_quiet_and_cools_everything_held"] },
+  { id = "ARCH-R52", state = "partial", evidence = ["src/lemonfiber/credential.py", "tests/test_clients.py::test_the_token_is_never_in_the_url"] },
+  { id = "ARCH-R55", state = "done", evidence = ["src/lemonfiber/envelope.py", "tests/test_envelope.py::test_another_version_is_refused_naming_both"] },
+  { id = "ARCH-R58", state = "done", evidence = ["src/lemonfiber/_generated", "tests/test_architecture.py::test_no_written_module_declares_a_response_shape"] },
+  { id = "ARCH-R59", state = "done", evidence = ["src/lemonfiber/credential.py", "tests/test_clients.py::test_a_read_asks_for_the_commands_document_carrying_the_token_in_its_header"] },
+  { id = "ARCH-R60", state = "done", evidence = ["src/lemonfiber/address.py", "tests/test_trust.py::test_a_name_is_accepted_where_everything_it_resolves_to_is_loopback", "tests/test_trust.py::test_an_address_off_this_machine_is_refused_without_a_pin"] },
+  { id = "ARCH-R61", state = "partial", evidence = ["src/lemonfiber/stream.py", "tests/test_stream.py::test_silence_beyond_twice_the_beat_breaks_the_stream_and_cools_what_is_held"] },
+  { id = "ARCH-R62", state = "partial", evidence = ["src/lemonfiber/stream.py", "tests/test_stream.py::test_a_stream_the_server_ends_is_resumed_from_the_last_event_it_carried"] },
+  { id = "ARCH-R63", state = "done", evidence = ["src/lemonfiber/envelope.py", "tests/test_envelope.py::test_an_envelope_narrows_to_the_kind_it_is"] },
+  { id = "ARCH-R64", state = "partial", evidence = ["contract/VERSION", "scripts/contract_sync.py", "tests/test_scripts.py::test_a_revision_is_vendored_beside_the_revision_it_came_from"] },
+  { id = "ARCH-R65", state = "done", evidence = ["scripts/contract_generate.py", "tests/test_generator.py::test_the_vendored_artefact_generates_what_is_committed"] },
+  { id = "ARCH-R66", state = "done", evidence = ["scripts/contract_generate.py", "tests/test_generator.py::test_the_vendored_artefact_generates_what_is_committed"] },
+  { id = "ARCH-R67", state = "done", evidence = ["scripts/contract_generator/artefact.py", "tests/test_generator.py::test_a_version_this_package_does_not_implement_is_refused_naming_both", "tests/test_generator.py::test_nothing_is_written_when_the_artefact_is_refused"] },
+  { id = "ARCH-R73", state = "partial", evidence = ["scripts/contract_generator/artefact.py", "tests/test_generator.py::test_a_constraint_beside_a_reference_is_refused_naming_where"] },
+  { id = "ARCH-R78", state = "partial", evidence = ["src/lemonfiber/capabilities.py", "tests/test_clients.py::test_what_a_stack_can_do_is_read_for_the_credential_that_asked"] },
+  { id = "ARCH-R81", state = "done", evidence = ["src/lemonfiber/capabilities.py", "tests/test_clients.py::/api/something-newer"] },
+  { id = "ARCH-R99", state = "done", evidence = ["src/lemonfiber/address.py", "tests/test_trust.py::test_another_certificate_is_refused_before_anything_is_sent"] },
+  { id = "ARCH-R129", state = "partial", evidence = ["scripts/contract_generator/shapes.py", "tests/test_generator.py::test_a_definition_taking_a_name_the_generator_writes_is_refused_naming_it_and_its_kind"] },
+  { id = "ARCH-R138", state = "partial", evidence = ["src/lemonfiber/problems.py", "tests/test_clients.py::test_a_refusal_is_read_by_its_status_carrying_its_code_and_sentence"] },
+  { id = "ARCH-R139", state = "partial", evidence = ["scripts/contract_generator/refused.py", "tests/test_generator.py::test_listed_refusals_are_generated_with_what_the_contract_says_of_each"] },
+  { id = "ARCH-R170", state = "done", evidence = ["scripts/contract_generator/writer.py", "tests/test_generator.py::test_a_reference_to_no_definition_is_refused_naming_it_and_where_it_sits_and_nothing_is_written"] },
+]
