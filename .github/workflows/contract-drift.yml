@@ -43,94 +43,26 @@ jobs:
         with:
           persist-credentials: false
 
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+
       - name: Compare the vendored contract with the one the server describes
         env:
           LEMONFIBER: https://github.com/lemonfiber/lemonfiber.git
+          UV_LOCKED: "1"
+          UV_NO_BUILD: "1"
         run: |
           set -euo pipefail
 
-          # The revision is resolved first and the artefact fetched at it, so the
+          # The revision is resolved first and the contract fetched at it, so the
           # comparison and the command printed to fix it name the same commit.
           # Fetching `main` twice would let it move in between, and the remedy
           # would then be for a contract nobody compared.
           head=$(git ls-remote "$LEMONFIBER" refs/heads/main | cut -f1)
 
-          # `-L` follows redirects, and a redirect may point anywhere. These refuse
-          # any hop that is not HTTPS, so what is fetched cannot be downgraded.
-          curl -fsSL --proto "=https" --proto-redir "=https" --retry 3 -o served.json \
-            "https://raw.githubusercontent.com/lemonfiber/lemonfiber/${head}/contract/web-api.contract.json"
-
-          HEAD_REVISION="$head" python3 - <<'PY'
-          import json
-          import os
-          import pathlib
-          import sys
-
-          # What the run page shows above the log. The verdict is written here as
-          # well as printed, because a required check is read from the pull
-          # request, where the log is one click further away than the summary.
-          summary = os.environ.get("GITHUB_STEP_SUMMARY")
-          said = []
-
-
-          def say(line=""):
-              print(line)
-              said.append(line)
-
-
-          def leave(code):
-              if summary is not None:
-                  pathlib.Path(summary).write_text("\n".join(said) + "\n")
-              sys.exit(code)
-
-
-          head = os.environ["HEAD_REVISION"]
-          vendored = json.loads(pathlib.Path("contract/web-api.contract.json").read_text())
-          served = json.loads(pathlib.Path("served.json").read_text())
-          stamp = pathlib.Path("contract/VERSION").read_text().strip()
-
-          ours = set(vendored.get("kinds", {}))
-          theirs = set(served.get("kinds", {}))
-
-          if vendored == served:
-              say("## The vendored contract is current")
-              say()
-              say(f"It matches the one lemonfiber `{head}` describes, vendored at `{stamp}`.")
-              leave(0)
-
-          missing = sorted(theirs - ours)
-          extra = sorted(ours - theirs)
-
-          say("## The vendored contract is behind")
-          say()
-          say("**This check gates.** It fails every pull request against `main` until")
-          say("the artefact in `contract/` is the one lemonfiber serves. You did not")
-          say("break this and you do not need to understand the kinds below to fix it.")
-          say()
-          say(f"- vendored at `{stamp}`: api_version {vendored.get('api_version')}, {len(ours)} kinds")
-          say(f"- served at lemonfiber `{head}`: api_version {served.get('api_version')}, {len(theirs)} kinds")
-          if missing:
-              say(f"- described by the server and not here: {', '.join(missing)}")
-          if extra:
-              say(f"- described here and not by the server: {', '.join(extra)}")
-          if not missing and not extra:
-              say("- the same kinds, described differently — a shape changed inside one of them.")
-          say()
-          say("### Run this")
-          say()
-          say("```sh")
-          say(f"uv run just sync {head}")
-          say("uv run just generate")
-          say("```")
-          say()
-          say("Then commit `contract/` and `src/lemonfiber/_generated`. Where that regenerates more")
-          say("than types — a kind arriving is a change to this package's surface — land")
-          say("the sync on its own first; that is the change this gate is asking for.")
-
-          print(
-              "::error::the vendored contract is behind lemonfiber "
-              f"{head} — run `uv run just sync {head}` then "
-              "`uv run just generate`, and commit contract/ and src/lemonfiber/_generated"
-          )
-          leave(1)
-          PY
+          # The script fetches the tarball of that revision over HTTPS alone,
+          # takes the contract from it in whichever layout the revision holds,
+          # and compares it with the vendored copy file by file. On a difference
+          # it names the files, writes the verdict and the remedy to the run's
+          # summary, where a required check is read from the pull request, and
+          # fails.
+          uv run --locked --no-build python -m scripts.contract_drift --gate "$head"

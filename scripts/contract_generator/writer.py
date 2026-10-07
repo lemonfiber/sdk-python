@@ -7,7 +7,15 @@ import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, cast
 
-from scripts.contract_generator.artefact import ANNOTATIONS, as_list, as_map, as_maps, object_of
+from scripts.contract_generator.artefact import (
+    ANNOTATIONS,
+    DIALECT,
+    INLINE,
+    as_list,
+    as_map,
+    as_maps,
+    object_of,
+)
 from scripts.contract_generator.refused import ArtefactRefusedError, refuse
 from scripts.contract_generator.shapes import Field, Shape, class_lines
 from scripts.contract_generator.spelling import docstring, is_field_name, literal, pascal
@@ -18,7 +26,7 @@ if TYPE_CHECKING:
 NARROWING = frozenset(
     {
         "$defs",
-        "$schema",
+        DIALECT,
         "additionalProperties",
         "exclusiveMaximum",
         "exclusiveMinimum",
@@ -44,7 +52,7 @@ UNDERSTOOD = (
 DEFINITION = re.compile(r"^[A-Z]\w*$", re.ASCII)
 """A definition's name, as the artefact spells one."""
 
-REFERENCE = re.compile(r"^#/\$defs/([^/]+)$")
+REFERENCE = re.compile(rf"^{re.escape(INLINE)}([^/]+)$")
 """A reference to a definition beside the one making it."""
 
 PRIMITIVES = {"string": "str", "integer": "int", "number": "float", "boolean": "bool", "null": "None"}

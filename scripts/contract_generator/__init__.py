@@ -2,8 +2,9 @@
 """Write `src/lemonfiber/_generated/` from the vendored contract artefact.
 
 Offline and deterministic: the same artefact in gives the same files out, so CI
-regenerates and fails on any difference. Generation reads
-`contract/web-api.contract.json` and `contract/VERSION` and nothing else, and
+regenerates and fails on any difference. Generation reads the vendored contract,
+the directory `contract/web-api/` or the single file
+`contract/web-api.contract.json`, and `contract/VERSION`, and nothing else, and
 writes nothing when it refuses the artefact. Every module is written as the
 formatter writes it, and none holds more lines than `pyproject.toml` allows a
 source file: a module that would is written as a package of parts.
@@ -19,7 +20,6 @@ from scripts.contract_generator.artefact import (
     checked,
     key_callable_of,
     kinds_of,
-    read_artefact,
     reads_of,
     refusals_of,
     users_of,
@@ -38,6 +38,7 @@ from scripts.contract_generator.tables import (
     reads_module,
     refusals_module,
 )
+from scripts.contract_generator.vendored import read_artefact
 from scripts.contract_generator.writer import Writer
 from scripts.contract_sync import ROOT
 from scripts.line_cap import LineCapError, line_cap, lines_in

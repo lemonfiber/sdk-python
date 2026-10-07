@@ -178,9 +178,13 @@ cannot use; nothing was sent) and `ApiVersionMismatchError` (an answer in an
 
 ## Where the types come from
 
-Everything under `src/lemonfiber/_generated/` is generated from
-`contract/web-api.contract.json`, which lemonfiber builds from the Rust types that
-produce its answers. Nothing there is edited by hand. `contract/VERSION` names the
+Everything under `src/lemonfiber/_generated/` is generated from the contract
+vendored under `contract/`, which lemonfiber builds from the Rust types that
+produce its answers. A revision of lemonfiber holds it either as the directory
+`contract/web-api/`, an index naming one file per kind, per definition and per
+list, or as the single file `contract/web-api.contract.json`. `just sync` vendors
+whichever the revision holds, and `just generate` reads either into the same
+types. Nothing there is edited by hand. `contract/VERSION` names the
 lemonfiber commit the copy came from.
 
 ```sh

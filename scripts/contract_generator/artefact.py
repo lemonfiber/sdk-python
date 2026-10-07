@@ -6,12 +6,11 @@ import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, cast
 
-from scripts.contract_generator.refused import ArtefactRefusedError, refuse
+from scripts.contract_generator.refused import refuse
 from scripts.contract_generator.spelling import pascal
-from scripts.contract_sync import ARTEFACT, REVISION, STAMP
+from scripts.contract_sync import REVISION, STAMP
 
 if TYPE_CHECKING:
-    import pathlib
     from collections.abc import Iterator, Mapping
 
 UNKNOWN = "an unknown revision"
@@ -19,6 +18,12 @@ UNKNOWN = "an unknown revision"
 
 SPOKEN = 1
 """The wire version this package implements."""
+
+DIALECT = "$schema"
+"""The keyword a schema names the dialect it is written in with."""
+
+INLINE = "#/$defs/"
+"""How the artefact spells a reference to a definition beside it, before the definition's name."""
 
 ANNOTATIONS = frozenset({"description", "title", "default", "examples", "$comment"})
 """Keywords that describe a schema without constraining what it matches."""
@@ -349,18 +354,3 @@ def reads_of(artefact: Mapping[str, object]) -> list[Served]:
     if problems:
         refuse("the vendored contract lists a read this generator cannot write:\n  " + "\n  ".join(problems))
     return read
-
-
-def read_artefact(root: pathlib.Path) -> tuple[dict[str, object], str]:
-    """Return the vendored artefact and the revision it was taken from."""
-    stamp_path = root / STAMP
-    stamp = stamp_path.read_text(encoding="utf-8").strip() if stamp_path.is_file() else UNKNOWN
-    try:
-        artefact: object = json.loads((root / ARTEFACT).read_text(encoding="utf-8"))
-    except (OSError, ValueError) as unreadable:
-        message = f"{ARTEFACT} could not be read: {unreadable}"
-        raise ArtefactRefusedError(message) from unreadable
-    read = object_of(artefact)
-    if read is None:
-        refuse(f"{ARTEFACT} is not an object")
-    return read, stamp

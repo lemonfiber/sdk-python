@@ -9,6 +9,7 @@ import pytest
 
 from scripts import contract_generate
 from scripts.contract_generator import OUT, generate, run
+from scripts.contract_generator.vendored import read_artefact
 from scripts.contract_sync import STAMP
 from tests.generating import CODE, artefact, generated, keys, kind, refusal, source, write
 
@@ -32,8 +33,7 @@ PROBLEM = {
 
 def test_the_vendored_artefact_generates_what_is_committed() -> None:
     root = pathlib.Path(__file__).resolve().parent.parent
-    whole = json.loads((root / "contract/web-api.contract.json").read_text(encoding="utf-8"))
-    stamp = (root / "contract/VERSION").read_text(encoding="utf-8").strip()
+    whole, stamp = read_artefact(root)
     files = generate(whole, stamp)
     committed = {path.relative_to(root): path for path in (root / OUT).rglob("*.py")}
     assert set(files) == set(committed)
