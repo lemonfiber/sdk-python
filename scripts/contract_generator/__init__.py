@@ -99,7 +99,9 @@ def generate(
     if shared_paths:
         modules.append(index(SHARED_PACKAGE, "Every shape more than one kind carries.", shared_paths))
         members.append(SHARED_PACKAGE)
-    summary = f"The lemonfiber contract's shapes, generated from the artefact at {stamp}."
+    summary = (
+        "The lemonfiber contract's shapes; `contract/VERSION` names the revision they were generated from."
+    )
     modules.append(index((), summary, sorted(members)))
     return fitted(modules, formatter, limit)
 

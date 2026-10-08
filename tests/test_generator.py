@@ -39,7 +39,7 @@ def test_the_vendored_artefact_generates_what_is_committed() -> None:
     assert set(files) == set(committed)
     for path, written in files.items():
         assert committed[path].read_text(encoding="utf-8") == written
-    assert f"artefact at {stamp}" in files[OUT / "__init__.py"]
+    assert all(stamp not in written for written in files.values())
 
 
 def test_an_object_is_a_typed_dict_with_its_required_and_optional_keys(tmp_path: pathlib.Path) -> None:
@@ -382,10 +382,22 @@ def test_a_path_beside_the_reads_taking_a_name_the_module_holds_is_refused() -> 
     assert "/api/api/{name} would be written as `API`" in refusal(artefact(PULL, reads=listed))
 
 
-def test_a_missing_stamp_says_the_revision_is_unknown(tmp_path: pathlib.Path) -> None:
-    write(tmp_path, artefact({"pull": kind({"type": "string"})}), stamp=None)
-    assert run(tmp_path) == 0
-    assert "an unknown revision" in source(tmp_path, "__init__.py")
+@pytest.mark.parametrize("stamp", [None, "v2.0.0", "d2bf74b950a9f6fb73f2bcd60e2d8adf85337cd6"])
+def test_the_revision_a_contract_came_from_changes_no_generated_file(
+    tmp_path: pathlib.Path,
+    stamp: str | None,
+) -> None:
+    contract = artefact({"pull": kind({"type": "string"})})
+    write(tmp_path / "stamped", contract, stamp="v1.0.0")
+    write(tmp_path / "other", contract, stamp=stamp)
+    assert run(tmp_path / "stamped") == 0
+    assert run(tmp_path / "other") == 0
+    written = {
+        path.relative_to(tmp_path / "stamped"): path for path in (tmp_path / "stamped" / OUT).rglob("*.py")
+    }
+    assert written
+    for path, file in written.items():
+        assert (tmp_path / "other" / path).read_text(encoding="utf-8") == file.read_text(encoding="utf-8")
 
 
 def test_a_version_this_package_does_not_implement_is_refused_naming_both() -> None:
