@@ -10,7 +10,7 @@ from scripts.contract_generator.spelling import docstring
 COPYRIGHT = "# Copyright (c) 2026 NightWorksIO"
 
 PROVENANCE = (
-    "Generated from `contract/web-api.contract.json`. Do not edit: `just generate` rewrites it,\n"
+    "Generated from the contract vendored in `contract/`. Do not edit: `just generate` rewrites it,\n"
     "and CI fails on any difference."
 )
 """What every generated module says of itself beneath what it holds."""
