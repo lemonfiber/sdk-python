@@ -103,7 +103,9 @@ minimum-score = 100
 # names it: the symbol, the kind of break, and why. A listed break passes for
 # that symbol and that kind alone, where a commit since the consumer's pin is
 # marked breaking; every other break fails.
-accepted = []
+accepted = [
+  { symbol = "lemonfiber._generated.kinds.plugins.api_kind.PluginPair", kind = "object-changed-kind", reason = "its key `from` is a Python keyword, so the TypedDict is written in its functional form; the shape a value takes is unchanged" },
+]
 
 [tool.lemonfiber.line-cap]
 # The most lines a file may hold, as the core holds its own. A source file, the
