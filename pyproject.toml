@@ -103,12 +103,7 @@ minimum-score = 100
 # names it: the symbol, the kind of break, and why. A listed break passes for
 # that symbol and that kind alone, where a commit since the consumer's pin is
 # marked breaking; every other break fails.
-accepted = [
-  { symbol = "lemonfiber.Admitted", kind = "object-removed", reason = "named `Session`, apart from the contract's `Admitted` shape" },
-  { symbol = "lemonfiber.Bundle", kind = "object-removed", reason = "named `BundleFile`, apart from the contract's `Bundle` shape" },
-  { symbol = "lemonfiber._aio.AsyncClient.logs(query)", kind = "parameter-removed", reason = "the logs are asked for by `services`, `forms` and `tail`" },
-  { symbol = "lemonfiber._sync.SyncClient.logs(query)", kind = "parameter-removed", reason = "the logs are asked for by `services`, `forms` and `tail`" },
-]
+accepted = []
 
 [tool.lemonfiber.line-cap]
 # The most lines a file may hold, as the core holds its own. A source file, the
