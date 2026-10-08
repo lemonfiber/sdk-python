@@ -1,10 +1,11 @@
 # AGENTS.md — sdk-python
 
-Guidance for any AI agent working in this repo.
-
-> **Common rules for every lemonfiber repo are canonical in the spec:**
-> [50-governance/ai-contributors.md](https://github.com/lemonfiber/spec/blob/main/50-governance/ai-contributors.md).
-> Read them. This file is the `sdk-python`-specific header only.
+> **Start at the roadmap and board on [lemonfiber.app](https://lemonfiber.app),
+> rendered from the report of where every unreleased version stands. Then the
+> rules** every repository shares:
+> [working in the repositories](https://github.com/lemonfiber/spec/blob/main/50-governance/working-in-the-repositories.md)
+> and [the rules for agents](https://github.com/lemonfiber/spec/blob/main/50-governance/ai-contributors.md).
+> This file holds only what is true of this repository.
 
 ## What this repo is
 
@@ -48,14 +49,11 @@ uv run just test      # the suite alone
 ```
 
 Mutation testing (`just mutation`) and the backward-compatibility check
-(`just bc`) are merge gates that run in CI; do not run mutation locally.
+(`just bc`) are merge gates that run in CI.
 
 ## Before you open a PR
 
 - `uv run just ci` is clean.
-- Cite a spec identifier in a commit `Spec:` trailer and the PR body.
-- Sign off every commit (`git commit -s`); the DCO gate fails without it.
-- No AI attribution in commits, PR bodies, or comments.
 - A break of the public surface made on purpose is listed under
   `[tool.lemonfiber.backward-compatibility]` in `pyproject.toml`, as the
   check's failure names it, and its commit is marked breaking (`!` after the
