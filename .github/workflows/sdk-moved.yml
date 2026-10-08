@@ -1,0 +1,56 @@
+# Tell Home Assistant when the client it vendors has moved.
+#
+# `integration-home-assistant` reaches a stack through this package and nothing
+# else, copied into `custom_components/lemonfiber/_vendor/lemonfiber/` at the
+# commit its `REVISION` names. Its `sdk-drift` compares that copy with this
+# main on every pull request there. This asks it to take this main instead of
+# leaving the next pull request there to find out: `sdk-bump` there vendors
+# it on a pull request of its own, and stops when nothing it copies moved.
+#
+# Every push to main asks. What the copy holds is `src/lemonfiber/`, and
+# `sdk-bump` decides whether that moved, so this is not filtered by path.
+name: sdk-moved
+
+on:
+  push:
+    branches: [main]
+  # Kept so the notifier can be driven against a real change rather than trusted.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tell:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Mint a token that can reach Home Assistant's workflows
+        id: token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.RELEASE_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: integration-home-assistant
+          # Dispatching a workflow, and nothing else.
+          permission-actions: write
+
+      - name: Ask Home Assistant to take this main
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+          if ! gh api --method POST \
+            "repos/${OWNER}/integration-home-assistant/actions/workflows/sdk-bump.yml/dispatches" \
+            -f ref=main
+          then
+            # A notifier that cannot notify says so, rather than leaving the
+            # weekly run as the only thing looking.
+            echo "::error::the client moved and Home Assistant was not told"
+            exit 1
+          fi
+          echo "asked integration-home-assistant to take this main."
