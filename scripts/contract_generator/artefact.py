@@ -40,7 +40,10 @@ SCREAMING_SNAKE = re.compile(r"^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$")
 ACTION = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
 """An action's name, as `POST /api/actions/<action>` spells one: `downloads-pause`."""
 
-CALLABLE_FIELDS = ("action", "disturbs", "rehearsal", "idempotent")
+CALLABLE_FLAGS = ("disturbs", "rehearsal", "idempotent")
+"""What the contract says of an action a key may call as true or false, in that order."""
+
+CALLABLE_FIELDS = ("action", *CALLABLE_FLAGS, "moved")
 """Everything the contract says of an action a key may call, in that order. Anything else is refused, not dropped."""
 
 READ_FIELDS = ("path", "parameters", "kinds", "file")
@@ -138,6 +141,7 @@ class ByKey:
     disturbs: bool
     rehearsal: bool
     idempotent: bool
+    moved: str | None = None
 
 
 def read_by_key(at: int, entry: object) -> tuple[ByKey | None, list[str]]:
@@ -145,19 +149,22 @@ def read_by_key(at: int, entry: object) -> tuple[ByKey | None, list[str]]:
     listed = object_of(entry)
     if listed is None:
         return None, [f"entry {at}: not an object"]
-    action = listed.get(CALLABLE_FIELDS[0])
-    flags = [listed.get(one) for one in CALLABLE_FIELDS[1:]]
+    action = listed.get("action")
+    flags = [listed.get(one) for one in CALLABLE_FLAGS]
+    moved = listed.get("moved")
     wrong: list[str] = []
     if not isinstance(action, str) or not ACTION.fullmatch(action):
         wrong.append(f"entry {at}: action {json.dumps(action)} is not an action's name")
-    for flag, value in zip(CALLABLE_FIELDS[1:], flags, strict=True):
+    for flag, value in zip(CALLABLE_FLAGS, flags, strict=True):
         if not isinstance(value, bool):
             wrong.append(f"entry {at}: {flag} {json.dumps(value)} is not true or false")
+    if moved is not None and (not isinstance(moved, str) or not CODE.fullmatch(moved)):
+        wrong.append(f"entry {at}: moved {json.dumps(moved)} is not a code")
     wrong.extend(unread_fields(f"entry {at}", listed, CALLABLE_FIELDS))
     if wrong or not isinstance(action, str):
         return None, wrong
     disturbs, rehearsal, idempotent = (value is True for value in flags)
-    return ByKey(action, disturbs, rehearsal, idempotent), []
+    return ByKey(action, disturbs, rehearsal, idempotent, moved if isinstance(moved, str) else None), []
 
 
 @dataclass(frozen=True)
@@ -314,6 +321,7 @@ def key_callable_of(artefact: Mapping[str, object]) -> list[ByKey]:
     entries = array_of(listed)
     if entries is None:
         refuse(f"the vendored contract's key_callable is {json.dumps(listed)}, and it is a list of actions")
+    listed_refusals = object_of(artefact.get("refusals", {})) or {}
     read: list[ByKey] = []
     problems: list[str] = []
     seen: set[str] = set()
@@ -324,6 +332,8 @@ def key_callable_of(artefact: Mapping[str, object]) -> list[ByKey]:
             continue
         if one.action in seen:
             problems.append(f"entry {at}: {one.action} is listed twice")
+        if one.moved is not None and one.moved not in listed_refusals:
+            problems.append(f"entry {at}: moved {one.moved} is not a refusal the contract lists")
         seen.add(one.action)
         read.append(one)
     if problems:

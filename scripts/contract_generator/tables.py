@@ -147,12 +147,15 @@ def key_callable_module(callable_by_key: Sequence[ByKey]) -> Module:
         '    """Whether it takes `dry_run`, so it can be rehearsed before the real call is offered."""',
         "    idempotent: bool",
         '    """Whether calling it again with the same arguments leaves the stack as calling it once did."""',
+        "    moved: str | None = None",
+        '    """The code a call is refused with when the offer it carries has moved since its rehearsal, or None."""',
         "",
         "",
         "KEY_CALLABLE: typing.Final[typing.Mapping[KeyCallableAction, KeyCallable]] = types.MappingProxyType({",
     ]
     body.extend(
-        f"    {json.dumps(one.action)}: KeyCallable({one.disturbs}, {one.rehearsal}, {one.idempotent}),"
+        f"    {json.dumps(one.action)}: KeyCallable({one.disturbs}, {one.rehearsal}, {one.idempotent}, "
+        f"{'None' if one.moved is None else json.dumps(one.moved)}),"
         for one in callable_by_key
     )
     body.extend(

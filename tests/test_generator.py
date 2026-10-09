@@ -208,9 +208,10 @@ def callable_by_key(
     disturbs: object = True,
     rehearsal: object = False,
     idempotent: object = False,
+    **more: object,
 ) -> dict[str, object]:
     """Return one action a key may call, as the contract lists it."""
-    return {"action": action, "disturbs": disturbs, "rehearsal": rehearsal, "idempotent": idempotent}
+    return {"action": action, "disturbs": disturbs, "rehearsal": rehearsal, "idempotent": idempotent, **more}
 
 
 def test_the_actions_a_key_may_call_are_generated_in_the_contracts_order(tmp_path: pathlib.Path) -> None:
@@ -230,11 +231,29 @@ def test_the_actions_a_key_may_call_are_generated_in_the_contracts_order(tmp_pat
         rehearsal=False,
         idempotent=True,
     )
+    assert module.KEY_CALLABLE["restart"].moved is None
     assert module.is_key_callable("restart")
     assert not module.is_key_callable("uninstall")
     assert typing.get_args(module.KeyCallableAction.__value__) == ("restart", "downloads-pause")
     with pytest.raises(TypeError):
         module.KEY_CALLABLE["uninstall"] = module.KeyCallable(disturbs=True, rehearsal=True, idempotent=False)
+
+
+MOVED: typing.Final = {
+    "LIFE-10": {"name": "OFFER_MOVED", "status": 409, "description": "Raised when the offer moved."},
+}
+
+
+def test_the_code_an_action_refuses_a_moved_offer_with_is_generated(tmp_path: pathlib.Path) -> None:
+    listed = [callable_by_key("restart", rehearsal=True, moved="LIFE-10"), callable_by_key("diagnose")]
+    module = generated(tmp_path, artefact(PULL, MOVED, key_callable=listed))
+    assert module.KEY_CALLABLE["restart"] == module.KeyCallable(
+        disturbs=True,
+        rehearsal=True,
+        idempotent=False,
+        moved="LIFE-10",
+    )
+    assert module.KEY_CALLABLE["diagnose"].moved is None
 
 
 def test_an_artefact_older_than_the_key_callable_list_lets_a_key_call_nothing(tmp_path: pathlib.Path) -> None:
@@ -259,10 +278,16 @@ def test_an_artefact_older_than_the_key_callable_list_lets_a_key_call_nothing(tm
             "entry 0: carries scope, which this generator does not read",
         ),
         ([callable_by_key("restart"), callable_by_key("restart")], "entry 1: restart is listed twice"),
+        ([callable_by_key("restart", moved="moved")], 'entry 0: moved "moved" is not a code'),
+        ([callable_by_key("restart", moved=10)], "entry 0: moved 10 is not a code"),
+        (
+            [callable_by_key("restart", moved="LIFE-11")],
+            "entry 0: moved LIFE-11 is not a refusal the contract lists",
+        ),
     ],
 )
 def test_an_action_a_key_may_call_this_generator_cannot_write_is_refused(listed: object, said: str) -> None:
-    assert said in refusal(artefact(PULL, key_callable=listed))
+    assert said in refusal(artefact(PULL, MOVED, key_callable=listed))
 
 
 def served(

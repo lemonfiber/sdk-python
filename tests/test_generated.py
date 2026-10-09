@@ -44,6 +44,7 @@ def test_every_action_a_key_may_call_says_what_the_artefact_says() -> None:
             disturbs=entry["disturbs"],
             rehearsal=entry["rehearsal"],
             idempotent=entry["idempotent"],
+            moved=entry.get("moved"),
         )
 
 

@@ -230,7 +230,8 @@ SCOPED = {
 
 
 def test_what_a_stack_can_do_is_read_for_the_credential_that_asked(client: Driver, stack: Stack) -> None:
-    stack.reply("GET", "/api/capabilities", Reply(body=envelope("capabilities", {"capabilities": SCOPED})))
+    answered = {"capabilities": SCOPED, "scope": "act", "stack": "stk_4f2a"}
+    stack.reply("GET", "/api/capabilities", Reply(body=envelope("capabilities", answered)))
     before = datetime.datetime.now(datetime.UTC)
     said = client.capabilities()
     [arrived] = stack.arrived
@@ -246,20 +247,45 @@ def test_what_a_stack_can_do_is_read_for_the_credential_that_asked(client: Drive
     assert said.of_read(Read.STATUS) == "available"
     assert said.of_action("pull") is None
     assert said.of("/api/plugins") is None
+    assert (said.scope, said.stack) == ("act", "stk_4f2a")
+
+
+@pytest.mark.parametrize("scope", ["operator", "read", "act", "member"])
+def test_every_scope_is_read_and_a_stack_with_no_identifier_names_none(
+    client: Driver,
+    stack: Stack,
+    scope: str,
+) -> None:
+    answered: dict[str, object] = {"capabilities": {}, "scope": scope}
+    stack.reply("GET", "/api/capabilities", Reply(body=envelope("capabilities", answered)))
+    said = client.capabilities()
+    assert (said.scope, said.stack) == (scope, None)
 
 
 @pytest.mark.parametrize(
     ("data", "what"),
     [
-        ({"capabilities": []}, "the capabilities are [], and they are an object keyed by path"),
+        (
+            {"capabilities": [], "scope": "act"},
+            "the capabilities are [], and they are an object keyed by path",
+        ),
         ("capabilities", "the capabilities are None, and they are an object keyed by path"),
         (
-            {"capabilities": {"/api/status": "maybe"}},
+            {"capabilities": {"/api/status": "maybe"}, "scope": "act"},
             "'/api/status' is 'maybe', which is not a state a capability can be in",
         ),
         (
-            {"capabilities": {"/api/status": 1}},
+            {"capabilities": {"/api/status": 1}, "scope": "act"},
             "'/api/status' is 1, which is not a state a capability can be in",
+        ),
+        ({"capabilities": {}}, "the scope is None, which is not a scope a credential can have"),
+        (
+            {"capabilities": {}, "scope": "admin"},
+            "the scope is 'admin', which is not a scope a credential can have",
+        ),
+        (
+            {"capabilities": {}, "scope": "read", "stack": 7},
+            "the stack is 7, and it is named by text or not at all",
         ),
     ],
 )
