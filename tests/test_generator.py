@@ -193,6 +193,25 @@ def test_listed_refusals_are_generated_with_what_the_contract_says_of_each(tmp_p
     assert typing.get_args(module.RefusalCode.__value__) == ("ADMIT-4", "READ-1")
 
 
+def test_each_familys_refusals_are_a_module_of_their_own_gathered_into_one_list(
+    tmp_path: pathlib.Path,
+) -> None:
+    refusals = {
+        "PLAY-2": {
+            "name": "NOT_ON_THEIR_SHELF",
+            "status": 404,
+            "description": "Raised where it is not theirs.",
+        },
+        "ADMIT-4": {"name": "NOT_ADMITTED", "status": 403, "description": "Raised when nothing admits it."},
+        "PLAY-10": {"name": "LATER", "status": 404, "description": "Raised later."},
+    }
+    module = generated(tmp_path, artefact({"pull": kind({"type": "string"})}, refusals))
+    assert list(module.REFUSAL_CODES) == ["ADMIT-4", "PLAY-10", "PLAY-2"]
+    assert '"""What the contract says of each `PLAY` code."""' in source(tmp_path, "refusals/play_codes.py")
+    assert "from .play_codes import PLAY" in source(tmp_path, "refusals/table.py")
+    assert "PLAY" not in module.__all__
+
+
 def test_an_artefact_older_than_the_refusal_list_lists_none(tmp_path: pathlib.Path) -> None:
     module = generated(tmp_path, artefact({"pull": kind({"type": "string"})}))
     assert dict(module.REFUSAL_CODES) == {}
@@ -368,6 +387,11 @@ def test_an_artefact_older_than_the_read_list_names_no_read(tmp_path: pathlib.Pa
         (["/api/status"], "entry 0: not an object"),
         ([served("/status")], 'entry 0: path "/status" is not a read\'s path'),
         ([served("/api/Status")], 'entry 0: path "/api/Status" is not a read\'s path'),
+        ([served("/api/held/{id}/{kind}")], 'entry 0: path "/api/held/{id}/{kind}" is not a read\'s path'),
+        (
+            [served("/api/held/{id}/poster/x")],
+            'entry 0: path "/api/held/{id}/poster/x" is not a read\'s path',
+        ),
         ([served("/api/status", kinds="pull")], 'entry 0: kinds "pull" is not a list of kinds'),
         (
             [served("/api/status", kinds=["push"])],
@@ -403,6 +427,18 @@ def test_an_artefact_older_than_the_read_list_names_no_read(tmp_path: pathlib.Pa
 )
 def test_a_read_this_generator_cannot_write_is_refused(listed: object, said: str) -> None:
     assert said in refusal(artefact(PULL, reads=listed))
+
+
+def test_a_file_read_with_a_word_after_its_segment_is_the_path_a_caller_fills(tmp_path: pathlib.Path) -> None:
+    listed = [
+        served("/api/held/{id}/poster", kinds=[], parameters=[parameter("member")], file=True),
+        served("/api/held/{id}/seasons", parameters=[parameter("member")]),
+    ]
+    module = generated(tmp_path, artefact(PULL, reads=listed))
+    assert module.HELD_ID_POSTER == "/api/held/{id}/poster"
+    assert module.READS[module.Read.HELD_ID_SEASONS].segments == ("id",)
+    written = source(tmp_path, "reads.py")
+    assert '"""Answers with a file, for the `id` in its path; takes `member`."""' in written
 
 
 def test_a_read_whose_path_a_caller_fills_keeps_its_segment(tmp_path: pathlib.Path) -> None:

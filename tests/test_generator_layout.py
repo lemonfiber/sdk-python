@@ -117,7 +117,7 @@ def test_a_list_past_the_cap_is_refused_naming_its_module() -> None:
         for at in range(40)
     }
     said = refusal(artefact({"pull": kind({"type": "string"})}, refusals), cap=60)
-    assert said.startswith(f"{OUT}/refusals.py would hold ")
+    assert said.startswith(f"{OUT}/refusals/listed.py would hold ")
     assert said.endswith(" lines, over the 60 a module may hold")
 
 

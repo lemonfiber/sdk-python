@@ -6,7 +6,7 @@ import re
 from typing import TYPE_CHECKING
 
 from scripts.contract_generator.artefact import SPOKEN
-from scripts.contract_generator.modules import Module
+from scripts.contract_generator.modules import Module, index
 from scripts.contract_generator.refused import refuse
 from scripts.contract_generator.spelling import pascal
 
@@ -21,6 +21,9 @@ KINDS_PACKAGE = ("kinds",)
 SHARED_PACKAGE = ("shared",)
 """Where the shapes more than one kind carries are written."""
 
+REFUSALS_PACKAGE = ("refusals",)
+"""Where the refusal codes, and what the contract says of each family's, are written."""
+
 API = "/api"
 """What every read's path begins with."""
 
@@ -28,7 +31,10 @@ ONE_A_LINE = frozenset({"/api/logs"})
 """The reads answered one envelope a line, which `Read` leaves out: the client reaches each by a method of its own."""
 
 PLACEHOLDER = re.compile(r"/\{([a-z][a-z_]*)\}$")
-"""The value a read takes in its path: `/{name}`."""
+"""The value a read takes as the last segment of its path: `/{name}`."""
+
+SEGMENT = re.compile(r"\{([a-z][a-z_]*)\}")
+"""A value a read takes anywhere in its path: `{id}`."""
 
 
 def envelope_module(kinds: Sequence[str]) -> Module:
@@ -83,38 +89,49 @@ def narrowing_module(kinds: Sequence[str]) -> Module:
     )
 
 
-def refusals_module(refusals: Mapping[str, Mapping[str, object]]) -> Module:
-    """Return the module of the refusal codes the contract lists, and what it says of each."""
+def refusals_modules(refusals: Mapping[str, Mapping[str, object]]) -> list[Module]:
+    """Return the package of the refusal codes the contract lists, and what it says of each.
+
+    What it says of each family's codes is a module of its own, so the list grows a
+    family at a time rather than past what one module may hold.
+    """
     codes = sorted(refusals)
     union = f"typing.Literal[{', '.join(json.dumps(code) for code in codes)}]" if codes else "typing.Never"
-    body = [
-        "",
-        f"type RefusalCode = {union}",
-        '"""Every code a refusal may carry."""',
-        "",
-        "",
-        "class ListedRefusal(typing.NamedTuple):",
-        '    """What the contract says of one refusal code."""',
-        "",
-        "    name: str",
-        '    """The code\'s name in the core\'s registry."""',
-        "    status: int",
-        '    """The one status the refusal is answered with."""',
-        "    description: str",
-        '    """The registry\'s own line about it."""',
-        "",
-        "",
-        "REFUSAL_CODES: typing.Final[typing.Mapping[RefusalCode, ListedRefusal]] = types.MappingProxyType({",
-    ]
-    for code in codes:
-        listed = refusals[code]
-        body.append(
-            f"    {json.dumps(code)}: ListedRefusal({json.dumps(listed['name'])}, {listed['status']}, "
-            f"{json.dumps(listed['description'])}),",
-        )
-    body.extend(
+    listed = Module(
+        (*REFUSALS_PACKAGE, "listed"),
+        "Every code a refusal may carry, and the shape of what the contract says of one.",
         [
-            "})",
+            "",
+            f"type RefusalCode = {union}",
+            '"""Every code a refusal may carry."""',
+            "",
+            "",
+            "class ListedRefusal(typing.NamedTuple):",
+            '    """What the contract says of one refusal code."""',
+            "",
+            "    name: str",
+            '    """The code\'s name in the core\'s registry."""',
+            "    status: int",
+            '    """The one status the refusal is answered with."""',
+            "    description: str",
+            '    """The registry\'s own line about it."""',
+        ],
+        ["ListedRefusal", "RefusalCode"],
+    )
+    shapes = {listed.path: {"ListedRefusal", "RefusalCode"}}
+    families: dict[str, list[str]] = {}
+    for code in codes:
+        families.setdefault(code.split("-", 1)[0], []).append(code)
+    parts = [family_module(family, members, refusals, shapes) for family, members in families.items()]
+    gathered = ", ".join(f"**{family}" for family in families)
+    table = Module(
+        (*REFUSALS_PACKAGE, "table"),
+        "What the contract says of every refusal code, every family's gathered.",
+        [
+            "",
+            "REFUSAL_CODES: typing.Final[typing.Mapping[RefusalCode, ListedRefusal]] = types.MappingProxyType(",
+            f"    {{{gathered}}},",
+            ")",
             '"""What the contract says of each refusal code."""',
             "",
             "",
@@ -122,10 +139,31 @@ def refusals_module(refusals: Mapping[str, Mapping[str, object]]) -> Module:
             '    """Tell whether a code is one the contract lists as a refusal\'s."""',
             "    return value in REFUSAL_CODES",
         ],
+        ["REFUSAL_CODES", "is_refusal_code"],
+        imports={**shapes, **{part.path: {family} for part, family in zip(parts, families, strict=True)}},
+        standard=("types", "typing"),
     )
-    names = ["REFUSAL_CODES", "ListedRefusal", "RefusalCode", "is_refusal_code"]
     summary = "Every code the contract lists a refusal as carrying, and what it says of each."
-    return Module(("refusals",), summary, body, names, standard=("types", "typing"))
+    return [listed, *parts, table, index(REFUSALS_PACKAGE, summary, [listed.path, table.path])]
+
+
+def family_module(
+    family: str,
+    codes: Sequence[str],
+    refusals: Mapping[str, Mapping[str, object]],
+    shapes: dict[tuple[str, ...], set[str]],
+) -> Module:
+    """Return the module of what the contract says of one family's refusal codes, handing on nothing."""
+    body = ["", f"{family}: typing.Final[typing.Mapping[RefusalCode, ListedRefusal]] = {{"]
+    for code in codes:
+        listed = refusals[code]
+        body.append(
+            f"    {json.dumps(code)}: ListedRefusal({json.dumps(listed['name'])}, {listed['status']}, "
+            f"{json.dumps(listed['description'])}),",
+        )
+    body.extend(["}", f'"""What the contract says of each `{family}` code."""'])
+    summary = f"What the contract says of each refusal code of the `{family}` family."
+    return Module((*REFUSALS_PACKAGE, f"{family.lower()}_codes"), summary, body, [], imports=dict(shapes))
 
 
 def key_callable_module(callable_by_key: Sequence[ByKey]) -> Module:
@@ -194,8 +232,7 @@ def member(served: Served) -> str:
 
 def segments(served: Served) -> tuple[str, ...]:
     """Return the segments of a read's path a caller fills, by name."""
-    placeholder = PLACEHOLDER.search(served.path)
-    return (placeholder.group(1),) if placeholder else ()
+    return tuple(SEGMENT.findall(served.path))
 
 
 def reached(served: Served) -> str:
@@ -218,11 +255,13 @@ def said(served: Served) -> str:
     kinds = " or ".join(f"`{kind}`" for kind in served.kinds)
     if served.file:
         placeholder = PLACEHOLDER.search(served.path)
-        answers = (
-            f"Answers with a file, named by `{placeholder.group(1)}` in the path"
-            if placeholder
-            else "Answers with a file"
-        )
+        filled = segments(served)
+        if placeholder:
+            answers = f"Answers with a file, named by `{placeholder.group(1)}` in the path"
+        elif filled:
+            answers = f"Answers with a file, for the `{filled[0]}` in its path"
+        else:
+            answers = "Answers with a file"
     elif served.path in ONE_A_LINE:
         answers = f"Answers one envelope a line, each {kinds}"
     else:

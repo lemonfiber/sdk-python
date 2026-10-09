@@ -66,6 +66,8 @@ class Streamed:
     hold: float = 0.0
     abort: bool = False
     """Whether the connection is cut rather than the stream ended."""
+    headers: Mapping[str, str] = field(default_factory=dict[str, str])
+    """Headers sent beside, or in place of, the event stream's own. The body is sent chunked, so no length."""
 
 
 def event(kind: str, data: object, event_id: str | None = None, version: int = API_VERSION) -> bytes:
@@ -146,7 +148,7 @@ class Stack:
         return web.Response(status=reply.status, body=content, headers=headers)
 
     async def _stream(self, request: web.Request, reply: Streamed) -> web.StreamResponse:
-        response = web.StreamResponse(headers={"Content-Type": "text/event-stream"})
+        response = web.StreamResponse(headers={"Content-Type": "text/event-stream", **reply.headers})
         await response.prepare(request)
         for delay, chunk in reply.chunks:
             await asyncio.sleep(delay)

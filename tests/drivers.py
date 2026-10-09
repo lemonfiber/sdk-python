@@ -22,6 +22,7 @@ if TYPE_CHECKING:
         Finished,
         JobStanding,
         Json,
+        Picture,
         Query,
         Read,
         Session,
@@ -124,6 +125,14 @@ class Driver(Protocol):
         """Fetch a bundle."""
         ...
 
+    def poster(self, title: str, query: Query | None = None) -> Picture:
+        """Fetch a poster."""
+        ...
+
+    def backdrop(self, title: str, query: Query | None = None) -> Picture:
+        """Fetch a backdrop."""
+        ...
+
     def act(self, action: str, arguments: Mapping[str, Json] | None = None) -> Envelope:
         """Act."""
         ...
@@ -185,6 +194,14 @@ class SyncDriver:
     def bundle(self, name: str) -> BundleFile:
         """Fetch a bundle."""
         return self.client.bundle(name)
+
+    def poster(self, title: str, query: Query | None = None) -> Picture:
+        """Fetch a poster."""
+        return self.client.poster(title, query)
+
+    def backdrop(self, title: str, query: Query | None = None) -> Picture:
+        """Fetch a backdrop."""
+        return self.client.backdrop(title, query)
 
     def act(self, action: str, arguments: Mapping[str, Json] | None = None) -> Envelope:
         """Act."""
@@ -260,6 +277,14 @@ class AsyncDriver:
     def bundle(self, name: str) -> BundleFile:
         """Fetch a bundle."""
         return self.run(self.client.bundle(name))
+
+    def poster(self, title: str, query: Query | None = None) -> Picture:
+        """Fetch a poster."""
+        return self.run(self.client.poster(title, query))
+
+    def backdrop(self, title: str, query: Query | None = None) -> Picture:
+        """Fetch a backdrop."""
+        return self.run(self.client.backdrop(title, query))
 
     def act(self, action: str, arguments: Mapping[str, Json] | None = None) -> Envelope:
         """Act."""

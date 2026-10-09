@@ -31,12 +31,13 @@ from scripts.contract_generator.refused import ArtefactRefusedError, refuse
 from scripts.contract_generator.spelling import pascal
 from scripts.contract_generator.tables import (
     KINDS_PACKAGE,
+    REFUSALS_PACKAGE,
     SHARED_PACKAGE,
     envelope_module,
     key_callable_module,
     narrowing_module,
     reads_module,
-    refusals_module,
+    refusals_modules,
 )
 from scripts.contract_generator.vendored import read_artefact
 from scripts.contract_generator.writer import Writer
@@ -89,13 +90,13 @@ def generate(
         [
             envelope_module(names),
             narrowing_module(names),
-            refusals_module(refusals),
             key_callable_module(callable_by_key),
             reads_module(reads),
             index(KINDS_PACKAGE, "Every kind's envelope, and the shapes only that kind carries.", kind_paths),
+            *refusals_modules(refusals),
         ],
     )
-    members = [("envelope",), ("key_callable",), KINDS_PACKAGE, ("narrowing",), ("reads",), ("refusals",)]
+    members = [("envelope",), ("key_callable",), KINDS_PACKAGE, ("narrowing",), ("reads",), REFUSALS_PACKAGE]
     if shared_paths:
         modules.append(index(SHARED_PACKAGE, "Every shape more than one kind carries.", shared_paths))
         members.append(SHARED_PACKAGE)

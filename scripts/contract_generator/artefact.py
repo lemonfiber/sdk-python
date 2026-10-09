@@ -52,8 +52,11 @@ READ_FIELDS = ("path", "parameters", "kinds", "file")
 PARAMETER_FIELDS = ("name", "repeatable")
 """Everything the contract says of a read's query parameter. Anything else is refused, not dropped."""
 
-READ_PATH = re.compile(r"^/api/[a-z][a-z0-9]*(?:-[a-z0-9]+)*(?:/\{[a-z][a-z_]*\})?$")
-"""A read's path, as the core spells one: `/api/front-door`, or `/api/bundle/{name}` with its one placeholder."""
+READ_PATH = re.compile(
+    r"^/api/[a-z][a-z0-9]*(?:-[a-z0-9]+)*(?:/\{[a-z][a-z_]*\}(?:/[a-z][a-z0-9]*(?:-[a-z0-9]+)*)?)?$",
+)
+"""A read's path, as the core spells one: `/api/front-door`, `/api/bundle/{name}` with its one placeholder, or
+`/api/held/{id}/poster` with a word after it."""
 
 PARAMETER = re.compile(r"^[a-z][a-z0-9_]*$")
 """A query parameter's name, as the core spells one: `most`."""
