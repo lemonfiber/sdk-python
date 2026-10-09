@@ -90,6 +90,7 @@ def attempt(way: Way, prefix: str, call: Call, limit: float) -> Answer | None:
     request, its credential included, rides along as the failure's cause.
     """
     route, pool = way
+    whole = call.most is None
     try:
         response = pool.urlopen(
             call.method,
@@ -98,7 +99,7 @@ def attempt(way: Way, prefix: str, call: Call, limit: float) -> Answer | None:
             headers={**call.headers, **route.headers()},
             retries=False,
             timeout=urllib3.Timeout(total=limit),
-            preload_content=call.most is None,
+            preload_content=whole,
         )
         body = response.data if call.most is None else capped(response, call.most)
     except urllib3.exceptions.SSLError:
