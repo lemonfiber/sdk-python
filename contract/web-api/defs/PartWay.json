@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "One thing the household holds, as a member is shown it.\n\nWhat a person recognises and nothing else. There is no file path, no container,\nno bitrate and no library id: a member deciding what to watch is not choosing a\ntranscode, and a surface handed those would have to decide not to draw them.",
+  "description": "Something a member was part-way through, and how far.",
   "type": "object",
   "properties": {
     "backdrop": {
@@ -25,9 +25,24 @@
       "description": "The identifier the server tells it apart by, which is what asking to play one\nof them names.",
       "type": "string"
     },
+    "length": {
+      "description": "How long it runs, in whole seconds, where the server knows.",
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint64",
+      "minimum": 0
+    },
     "medium": {
       "description": "Which of the kinds this product deals in it is.",
       "$ref": "Medium.json"
+    },
+    "position": {
+      "description": "How far in they got, in whole seconds.",
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
     },
     "poster": {
       "description": "Where its poster is served, where it has one.",
@@ -68,6 +83,7 @@
   "required": [
     "id",
     "title",
-    "medium"
+    "medium",
+    "position"
   ]
 }
