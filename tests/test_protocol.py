@@ -2,7 +2,7 @@
 """What goes on the wire, exactly, what each answer is read as, and how the transports are built to carry it."""
 
 import json
-from http import HTTPMethod
+from http import HTTPMethod, HTTPStatus
 
 import aiohttp
 import pytest
@@ -24,8 +24,9 @@ SENT = {"Accept": "application/json", "Content-Type": "application/json"}
 def test_a_segment_not_given_as_one_value_it_can_send_is_refused_before_anything_is_sent(
     query: calls.Query | None,
 ) -> None:
-    with pytest.raises(MisaskedError, match="needs one `id` it can send"):
+    with pytest.raises(MisaskedError, match="needs one `id` it can send") as refused:
         calls.read_call(Read.HELD_ID, query)
+    assert refused.value.status == HTTPStatus.BAD_REQUEST
 
 
 def test_each_call_is_the_request_it_names() -> None:
