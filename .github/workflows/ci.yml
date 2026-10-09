@@ -92,14 +92,14 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
-    uses: lemonfiber/spec/.github/workflows/spec-check.yml@9ea0d953458bb79b9afd8b412d7e99c9435cff34 # v1.0.46
+    uses: lemonfiber/spec/.github/workflows/spec-check.yml@4562180c9f974bf03aa9be34610f83bb6eb06029 # v1.0.61
 
   commitlint:
     if: github.event_name == 'pull_request'
     uses: lemonfiber/spec/.github/workflows/commitlint.yml@9ea0d953458bb79b9afd8b412d7e99c9435cff34 # v1.0.46
 
   hygiene:
-    uses: lemonfiber/spec/.github/workflows/hygiene.yml@9ea0d953458bb79b9afd8b412d7e99c9435cff34 # v1.0.46
+    uses: lemonfiber/spec/.github/workflows/hygiene.yml@4562180c9f974bf03aa9be34610f83bb6eb06029 # v1.0.61
 
   # Every pin this repository holds on a shared workflow, against what the spec's
   # default branch holds now.
@@ -107,7 +107,7 @@ jobs:
     uses: lemonfiber/spec/.github/workflows/workflow-pins.yml@9ea0d953458bb79b9afd8b412d7e99c9435cff34 # v1.0.46
 
   security:
-    uses: lemonfiber/spec/.github/workflows/security.yml@9ea0d953458bb79b9afd8b412d7e99c9435cff34 # v1.0.46
+    uses: lemonfiber/spec/.github/workflows/security.yml@4562180c9f974bf03aa9be34610f83bb6eb06029 # v1.0.61
 
   labeler:
     if: github.event_name == 'pull_request'
@@ -126,7 +126,7 @@ jobs:
       contents: read
       pull-requests: write
       issues: write
-    uses: lemonfiber/spec/.github/workflows/goal-automations.yml@9ea0d953458bb79b9afd8b412d7e99c9435cff34 # v1.0.46
+    uses: lemonfiber/spec/.github/workflows/goal-automations.yml@4562180c9f974bf03aa9be34610f83bb6eb06029 # v1.0.61
 
   # Formatting, every lint rule, strict types and the contract diff. One
   # checkout, one environment, cheapest first.
