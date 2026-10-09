@@ -33,5 +33,8 @@ requirement = [
   { id = "ARCH-R138", state = "partial", evidence = ["src/lemonfiber/problems.py", "tests/test_clients.py::test_a_refusal_is_read_by_its_status_carrying_its_code_and_sentence"] },
   { id = "ARCH-R139", state = "partial", evidence = ["scripts/contract_generator/refused.py", "tests/test_generator.py::test_listed_refusals_are_generated_with_what_the_contract_says_of_each"] },
   { id = "ARCH-R170", state = "done", evidence = ["scripts/contract_generator/writer.py", "tests/test_generator.py::test_a_reference_to_no_definition_is_refused_naming_it_and_where_it_sits_and_nothing_is_written"] },
+  { id = "ARCH-R163", state = "partial", evidence = ["src/lemonfiber/capabilities.py", "src/lemonfiber/_protocol/answers.py", "tests/test_clients.py::test_what_a_stack_can_do_is_read_for_the_credential_that_asked"] },
+  { id = "ARCH-R164", state = "partial", evidence = ["scripts/contract_generator/artefact.py", "tests/test_generator.py::test_the_code_an_action_refuses_a_moved_offer_with_is_generated"] },
+  { id = "ARCH-R179", state = "partial", evidence = ["src/lemonfiber/capabilities.py", "src/lemonfiber/_protocol/answers.py", "tests/test_clients.py::test_every_scope_is_read_and_a_stack_with_no_identifier_names_none"] },
   { id = "G4-R15", state = "partial", evidence = ["src/lemonfiber/_protocol/retry.py", "tests/test_asked_again.py::test_a_read_is_asked_again_twice_after_passing_failures_waiting_twice_as_long_the_second_time", "tests/test_asked_again.py::test_what_changes_something_is_never_asked_again"] },
 ]

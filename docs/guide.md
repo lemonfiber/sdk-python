@@ -100,6 +100,12 @@ by its path, and what it comes to for the credential that asked:
 does not have it. A path this package does not know is kept rather than refused.
 `read_at` says when the set was read, since it can change while you hold it.
 
+`scope` says whose credential asked: `operator`, a `read` or `act` key, or a
+household `member`. Read it rather than guess it from which requests are
+permitted. `stack` is the stack's own identifier, the one pairing material
+carries, or `None` where the stack has nowhere to keep one: two credentials
+with the same `stack` reach the same stack.
+
 ## Acting
 
 `act` sends an action once and never retries it, because a second sending would
@@ -121,8 +127,10 @@ long before it raises `StillRunningError`).
 `KEY_CALLABLE` lists the actions an integration key may call, in the contract's
 order. Each is a `KeyCallable` saying whether calling it `disturbs` the running
 system and whether it takes a `rehearsal` (`dry_run`), so the real call can be
-offered after a rehearsal. `is_key_callable` tells whether an action is on the
-list. A `read` key may call no action, and an `act` key only these.
+offered after a rehearsal, and `moved` names the code a call is refused with when
+the offer it carries back has moved since its rehearsal, or `None` where it takes
+no offer. `is_key_callable` tells whether an action is on the list. A `read` key
+may call no action, and an `act` key only these.
 
 ## Live updates
 

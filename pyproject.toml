@@ -104,7 +104,7 @@ minimum-score = 100
 # that symbol and that kind alone, where a commit since the consumer's pin is
 # marked breaking; every other break fails.
 accepted = [
-  { symbol = "lemonfiber._generated.kinds.plugins.api_kind.PluginPair", kind = "object-changed-kind", reason = "its key `from` is a Python keyword, so the TypedDict is written in its functional form; the shape a value takes is unchanged" },
+  { symbol = "lemonfiber.capabilities.CapabilitySet.__init__(scope)", kind = "parameter-added-required", reason = "the contract requires every capabilities answer to say whose credential asked, so a set without a scope is not one lemonfiber answers; the client builds the set, and a consumer reads it" },
 ]
 
 [tool.lemonfiber.line-cap]
