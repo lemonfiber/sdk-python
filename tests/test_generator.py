@@ -375,7 +375,10 @@ def test_an_artefact_older_than_the_read_list_names_no_read(tmp_path: pathlib.Pa
         ),
         ([served("/api/status", kinds=[])], "entry 0: answers with neither a kind nor a file"),
         ([served("/api/status", file="no")], 'entry 0: file "no" is not true or false'),
-        ([served("/api/status/{name}")], "entry 0: takes part of /api/status/{name} as a value"),
+        (
+            [served("/api/status/{name}", parameters=[parameter("name")])],
+            "entry 0: names name both as a segment of /api/status/{name} and as a query parameter",
+        ),
         ([served("/api/status", parameters={})], "entry 0: parameters {} is not a list"),
         ([served("/api/status", parameters=["form"])], "entry 0: parameter 0: not an object"),
         ([served("/api/status", parameters=[parameter("Form")])], 'parameter 0: name "Form" is not a query'),
@@ -400,6 +403,28 @@ def test_an_artefact_older_than_the_read_list_names_no_read(tmp_path: pathlib.Pa
 )
 def test_a_read_this_generator_cannot_write_is_refused(listed: object, said: str) -> None:
     assert said in refusal(artefact(PULL, reads=listed))
+
+
+def test_a_read_whose_path_a_caller_fills_keeps_its_segment(tmp_path: pathlib.Path) -> None:
+    listed = [served("/api/held"), served("/api/held/{id}", parameters=[parameter("member")])]
+    module = generated(tmp_path, artefact(PULL, reads=listed))
+    assert list(module.Read) == ["held", "held/{id}"]
+    assert module.Read.HELD_ID.path == "/api/held/{id}"
+    assert module.READS[module.Read.HELD_ID] == module.Readable(
+        kinds=("pull",),
+        parameters=(module.ReadParameter("member", repeatable=False),),
+        segments=("id",),
+    )
+    assert module.READS[module.Read.HELD].segments == ()
+    written = source(tmp_path, "reads.py")
+    assert '"""Answers with `pull`, for the `id` in its path; takes `member`."""' in written
+
+
+def test_two_reads_written_under_one_name_are_refused() -> None:
+    listed = [served("/api/held-id"), served("/api/held/{id}")]
+    assert "/api/held/{id} would be written as `HELD_ID`, which `Read` already names" in refusal(
+        artefact(PULL, reads=listed),
+    )
 
 
 def test_a_path_beside_the_reads_taking_a_name_the_module_holds_is_refused() -> None:

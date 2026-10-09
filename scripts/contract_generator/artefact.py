@@ -236,10 +236,11 @@ def read_served(at: int, entry: object, kinds: frozenset[str]) -> tuple[Served |
         wrong.append(f"{here}: file {json.dumps(file)} is not true or false")
     elif not file and not answers:
         wrong.append(f"{here}: answers with neither a kind nor a file")
-    elif not file and isinstance(path, str) and "{" in path:
-        wrong.append(
-            f"{here}: takes part of {path} as a value, and this generator writes only a file read so",
-        )
+    wrong.extend(
+        f"{here}: names {one.name} both as a segment of {path} and as a query parameter"
+        for one in parameters
+        if isinstance(path, str) and f"{{{one.name}}}" in path
+    )
     wrong.extend(unread_fields(here, listed, READ_FIELDS))
     if wrong or not isinstance(path, str):
         return None, wrong

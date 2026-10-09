@@ -69,6 +69,16 @@ status = expect(client.read(Read.STATUS), "status")
 status["data"]["condition"]  # "inactive" | "degraded" | "partial" | "active"
 ```
 
+A read whose path a caller fills keeps its segment in its name and value:
+`Read.HELD_ID` is `held/{id}`, and `READS` names its `segments`. The query
+gives each segment as one value, which is sent escaped as one path segment;
+one not given, given as a list, empty, `.` or `..` raises `MisaskedError` and
+nothing is sent:
+
+```python
+title = expect(client.read(Read.HELD_ID, {"id": "tt0133093"}), "title")
+```
+
 Every answer is an envelope: `api_version`, `kind` and `data`. `expect` narrows
 an envelope to the kind you expect, and raises `UnexpectedKindError` for any
 other. Every shape the contract describes is importable from

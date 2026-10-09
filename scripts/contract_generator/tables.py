@@ -28,7 +28,7 @@ ONE_A_LINE = frozenset({"/api/logs"})
 """The reads answered one envelope a line, which `Read` leaves out: the client reaches each by a method of its own."""
 
 PLACEHOLDER = re.compile(r"/\{([a-z][a-z_]*)\}$")
-"""The value a file read takes in its path: `/{name}`."""
+"""The value a read takes in its path: `/{name}`."""
 
 
 def envelope_module(kinds: Sequence[str]) -> Module:
@@ -175,8 +175,27 @@ def key_callable_module(callable_by_key: Sequence[ByKey]) -> Module:
 
 
 def member(served: Served) -> str:
-    """Return the name a read is written under: `/api/front-door` is `FRONT_DOOR`."""
-    return served.path.removeprefix(f"{API}/").split("/")[0].replace("-", "_").upper()
+    """Return the name a read is written under.
+
+    `/api/front-door` is `FRONT_DOOR`. A file read is named for its path short of
+    its segment, `/api/bundle/{name}` as `BUNDLE`; any other read keeps its
+    segment, `/api/held/{id}` as `HELD_ID`.
+    """
+    path = reached(served) if served.file else served.path
+    return (
+        path.removeprefix(f"{API}/")
+        .replace("{", "")
+        .replace("}", "")
+        .replace("/", "_")
+        .replace("-", "_")
+        .upper()
+    )
+
+
+def segments(served: Served) -> tuple[str, ...]:
+    """Return the segments of a read's path a caller fills, by name."""
+    placeholder = PLACEHOLDER.search(served.path)
+    return (placeholder.group(1),) if placeholder else ()
 
 
 def reached(served: Served) -> str:
@@ -208,6 +227,9 @@ def said(served: Served) -> str:
         answers = f"Answers one envelope a line, each {kinds}"
     else:
         answers = f"Answers with {kinds}"
+        filled = segments(served)
+        if filled:
+            answers += f", for the `{filled[0]}` in its path"
     phrases = [f"`{one.name}`" + (" (more than once)" if one.repeatable else "") for one in served.parameters]
     return f"{answers}; takes {joined(phrases)}." if phrases else f"{answers}."
 
@@ -229,15 +251,20 @@ def reads_module(reads: Sequence[Served]) -> Module:
         '    """',
         "",
     ]
+    taken: set[str] = set()
     for one in enveloped:
+        name = member(one)
+        if name in taken:
+            refuse(f"the read {one.path} would be written as `{name}`, which `Read` already names")
+        taken.add(name)
         value = one.path.removeprefix(f"{API}/")
-        body.extend([f"    {member(one)} = {json.dumps(value)}", f'    """{said(one)}"""'])
+        body.extend([f"    {name} = {json.dumps(value)}", f'    """{said(one)}"""'])
     body.extend(
         [
             "",
             "    @property",
             "    def path(self) -> str:",
-            '        """Return the path this read is served on."""',
+            '        """Return the path this read is served on, each segment a caller fills written as `{name}`."""',
             '        return f"{API}/{self.value}"',
         ],
     )
@@ -268,6 +295,8 @@ def reads_module(reads: Sequence[Served]) -> Module:
             '    """Every kind it may answer with."""',
             "    parameters: tuple[ReadParameter, ...]",
             '    """Every query parameter it takes, in the order the contract lists them."""',
+            "    segments: tuple[str, ...] = ()",
+            '    """Every segment of its path a caller fills, by name."""',
             "",
             "",
             "READS: typing.Final[typing.Mapping[Read, Readable]] = types.MappingProxyType({",
@@ -276,7 +305,9 @@ def reads_module(reads: Sequence[Served]) -> Module:
     for one in enveloped:
         kinds = tupled([json.dumps(kind) for kind in one.kinds])
         parameters = tupled([f"ReadParameter({json.dumps(p.name)}, {p.repeatable})" for p in one.parameters])
-        body.append(f"    Read.{member(one)}: Readable({kinds}, {parameters}),")
+        filled = segments(one)
+        tail = f", {tupled([json.dumps(name) for name in filled])}" if filled else ""
+        body.append(f"    Read.{member(one)}: Readable({kinds}, {parameters}{tail}),")
     body.extend(
         [
             "})",

@@ -103,9 +103,7 @@ minimum-score = 100
 # names it: the symbol, the kind of break, and why. A listed break passes for
 # that symbol and that kind alone, where a commit since the consumer's pin is
 # marked breaking; every other break fails.
-accepted = [
-  { symbol = "lemonfiber.capabilities.CapabilitySet.__init__(scope)", kind = "parameter-added-required", reason = "the contract requires every capabilities answer to say whose credential asked, so a set without a scope is not one lemonfiber answers; the client builds the set, and a consumer reads it" },
-]
+accepted = []
 
 [tool.lemonfiber.line-cap]
 # The most lines a file may hold, as the core holds its own. A source file, the

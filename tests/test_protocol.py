@@ -2,7 +2,7 @@
 """What goes on the wire, exactly, what each answer is read as, and how the transports are built to carry it."""
 
 import json
-from http import HTTPMethod
+from http import HTTPMethod, HTTPStatus
 
 import aiohttp
 import pytest
@@ -11,10 +11,22 @@ import urllib3
 from lemonfiber import Address, Credential, Read, _aio, _sync
 from lemonfiber._protocol import answers, calls, following, operation, refusals
 from lemonfiber.address import Route
-from lemonfiber.problems import StillRunningError
+from lemonfiber.problems import MisaskedError, StillRunningError
 
 JSON = {"Accept": "application/json"}
 SENT = {"Accept": "application/json", "Content-Type": "application/json"}
+
+
+@pytest.mark.parametrize(
+    "query",
+    [None, {}, {"id": None}, {"id": ["a", "b"]}, {"id": ""}, {"id": "."}, {"id": ".."}],
+)
+def test_a_segment_not_given_as_one_value_it_can_send_is_refused_before_anything_is_sent(
+    query: calls.Query | None,
+) -> None:
+    with pytest.raises(MisaskedError, match="needs one `id` it can send") as refused:
+        calls.read_call(Read.HELD_ID, query)
+    assert refused.value.status == HTTPStatus.BAD_REQUEST
 
 
 def test_each_call_is_the_request_it_names() -> None:
@@ -25,6 +37,12 @@ def test_each_call_is_the_request_it_names() -> None:
         "/api/front-door?a=1",
         JSON,
     )
+    assert calls.read_call(Read.HELD_ID, {"id": "a/b c", "member": "ada"}) == calls.Call(
+        HTTPMethod.GET,
+        "/api/held/a%2Fb%20c?member=ada",
+        JSON,
+    )
+    assert calls.read_call(Read.HELD_ID, {"id": 7}) == calls.Call(HTTPMethod.GET, "/api/held/7", JSON)
     assert calls.capabilities_call() == calls.Call(HTTPMethod.GET, "/api/capabilities", JSON)
     assert calls.logs_call(["x"], [], None) == calls.Call(HTTPMethod.GET, "/api/logs?service=x", JSON)
     assert calls.bundle_call("a/b c") == calls.Call(
