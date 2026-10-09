@@ -1,17 +1,23 @@
 # Copyright (c) 2026 NightWorksIO
 """What goes on the wire, exactly, what each answer is read as, and how the transports are built to carry it."""
 
+import asyncio
+import io
 import json
 from http import HTTPMethod, HTTPStatus
 
 import aiohttp
 import pytest
 import urllib3
+from aiohttp.base_protocol import BaseProtocol
+from urllib3.connection import HTTPConnection
 
 from lemonfiber import Address, Credential, Read, _aio, _sync
 from lemonfiber._protocol import answers, calls, following, operation, refusals
 from lemonfiber.address import Route
-from lemonfiber.problems import MisaskedError, StillRunningError
+from lemonfiber.files import PICTURE_MOST
+from lemonfiber.problems import MisaskedError, MissingError, StillRunningError, UnreadableResponseError
+from lemonfiber.reads import HELD_ID_BACKDROP, HELD_ID_POSTER
 
 JSON = {"Accept": "application/json"}
 SENT = {"Accept": "application/json", "Content-Type": "application/json"}
@@ -50,6 +56,12 @@ def test_each_call_is_the_request_it_names() -> None:
         "/api/bundle/a%2Fb%20c",
         {"Accept": "*/*"},
     )
+    assert calls.picture_call(HELD_ID_BACKDROP, "a/b c", {"member": "ada"}) == calls.Call(
+        HTTPMethod.GET,
+        "/api/held/a%2Fb%20c/backdrop?member=ada",
+        {"Accept": "image/jpeg, image/png, image/webp, image/gif, image/avif"},
+        most=PICTURE_MOST,
+    )
     assert calls.action_call("re/pair", {"x": [1]}) == calls.Call(
         HTTPMethod.POST,
         "/api/actions/re%2Fpair",
@@ -79,6 +91,11 @@ def test_each_operation_pairs_its_call_with_the_reading_of_its_answer() -> None:
     assert operation.capabilities().call == calls.capabilities_call()
     assert operation.logs(["x"], ["tv"], 3).call == calls.logs_call(["x"], ["tv"], 3)
     assert operation.bundle("b").call == calls.bundle_call("b")
+    assert operation.picture(HELD_ID_POSTER, "t", {"member": "ada"}).call == calls.picture_call(
+        HELD_ID_POSTER,
+        "t",
+        {"member": "ada"},
+    )
     assert operation.action("restart", None).call == calls.action_call("restart", None)
     assert operation.job("j").call == calls.job_call("j", HTTPMethod.GET)
     assert operation.release("j").call == calls.job_call("j", HTTPMethod.DELETE)
@@ -87,9 +104,126 @@ def test_each_operation_pairs_its_call_with_the_reading_of_its_answer() -> None:
     assert (handed.name, handed.content, handed.content_type) == ("b", b"z", "x")
 
 
+@pytest.mark.parametrize(
+    ("label", "read"),
+    [("IMAGE/JPEG", "image/jpeg"), ("image/gif; q=1", "image/gif"), (" image/avif ;x=y", "image/avif")],
+)
+def test_a_picture_is_kept_by_its_label_in_any_case_and_without_its_parameters(label: str, read: str) -> None:
+    assert answers.picture_of(calls.Answer(200, {"content-type": label}, b"z")).media_type == read
+
+
+@pytest.mark.parametrize(
+    ("length", "most", "over"),
+    [("11", 10, True), ("10", 10, False), ("", 10, False), ("ten", 10, False), ("-11", 10, False)],
+)
+def test_an_answer_declares_more_than_it_may_be_only_by_a_whole_length_past_it(
+    length: str,
+    most: int,
+    *,
+    over: bool,
+) -> None:
+    assert calls.declared_over({"content-length": length}, most) is over
+    assert calls.declared_over({}, most) is False
+
+
+def sent(body: bytes, headers: dict[str, str] | None = None) -> urllib3.HTTPResponse:
+    """Return an answer of `body` as urllib3 hands one over unread, over a connection from a pool."""
+    pool = urllib3.HTTPConnectionPool("127.0.0.1")
+    connection = HTTPConnection("127.0.0.1")
+    return urllib3.HTTPResponse(
+        body=io.BytesIO(body),
+        headers=headers,
+        preload_content=False,
+        pool=pool,
+        connection=connection,
+    )
+
+
+def test_a_capped_answer_that_declares_too_much_is_not_read_and_its_connection_is_closed() -> None:
+    response = sent(b"x" * 20, {"content-length": "20"})
+    assert _sync.capped(response, 10) == b""
+    assert response.connection is not None
+    assert response.closed
+
+
+@pytest.mark.parametrize(
+    ("body", "kept", "pooled"),
+    [(b"x" * 10, b"x" * 10, True), (b"x" * 20, b"x" * 11, False)],
+)
+def test_a_capped_answer_is_read_one_byte_past_its_most_and_no_further(
+    body: bytes,
+    kept: bytes,
+    *,
+    pooled: bool,
+) -> None:
+    response = sent(body)
+    assert _sync.capped(response, 10) == kept
+    assert (response.connection is None) is pooled
+
+
+async def fed(chunks: list[bytes], headers: dict[str, str], most: int) -> tuple[bytes, bytes]:
+    """Return what `capped` keeps of a body arriving a chunk at a time, and what it left unread."""
+    loop = asyncio.get_running_loop()
+    connected = BaseProtocol(loop)
+    connected.connection_made(asyncio.Transport())
+    content = aiohttp.StreamReader(connected, 2**16, loop=loop)
+
+    async def arriving() -> None:
+        for chunk in chunks:
+            content.feed_data(chunk)
+            await asyncio.sleep(0)
+        content.feed_eof()
+
+    feeding = asyncio.create_task(arriving())
+    kept = await _aio.capped(headers, content, most)
+    await feeding
+    return kept, await content.read()
+
+
+@pytest.mark.parametrize(
+    ("chunks", "kept", "left"),
+    [
+        ([b"a" * 5] * 4, b"a" * 11, b"a" * 9),
+        ([b"a" * 4, b"a" * 6], b"a" * 10, b""),
+        ([], b"", b""),
+    ],
+)
+def test_a_body_streamed_is_kept_one_byte_past_its_most_and_no_further(
+    chunks: list[bytes],
+    kept: bytes,
+    left: bytes,
+) -> None:
+    assert asyncio.run(fed(chunks, {}, 10)) == (kept, left)
+
+
+def test_a_body_streamed_whose_headers_declare_too_much_is_not_read() -> None:
+    assert asyncio.run(fed([b"a" * 5] * 4, {"content-length": "20"}, 10)) == (b"", b"a" * 20)
+
+
+def test_a_picture_is_a_read_and_asked_again_after_a_passing_failure() -> None:
+    assert operation.picture(HELD_ID_POSTER, "t", None).again is True
+
+
+def test_a_picture_with_no_label_is_refused_as_one() -> None:
+    unlabelled = calls.Answer(200, {}, b"z")
+    with pytest.raises(UnreadableResponseError) as refused:
+        answers.picture_of(unlabelled)
+    assert refused.value.what.startswith(
+        "the picture is labelled no type, and a picture is one of image/jpeg",
+    )
+
+
+def test_a_picture_refused_is_the_refusal_it_is() -> None:
+    absent = calls.Answer(404, {"content-type": "text/plain"}, b"No such title.")
+    with pytest.raises(MissingError):
+        answers.picture_of(absent)
+
+
 def test_the_credential_is_added_to_a_calls_headers_alone() -> None:
     call = calls.with_credential(calls.read_call(Read.STATUS, None), Credential("abc"))
     assert call == calls.Call(HTTPMethod.GET, "/api/status", {**JSON, "X-Lemonfiber-Token": "abc"})
+    capped = calls.with_credential(calls.picture_call(HELD_ID_POSTER, "t", None), Credential("abc"))
+    assert capped.most == PICTURE_MOST
 
 
 def test_the_wait_between_asking_about_work_shortens_to_what_is_left_and_stops_at_the_limit() -> None:

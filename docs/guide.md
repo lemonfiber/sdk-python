@@ -84,12 +84,29 @@ an envelope to the kind you expect, and raises `UnexpectedKindError` for any
 other. Every shape the contract describes is importable from
 `lemonfiber.contract`.
 
-Two reads are not a single envelope. `logs` takes the `services` and `forms` to
+Some reads are not a single envelope. `logs` takes the `services` and `forms` to
 narrow to and how many of the latest lines to answer with (`tail`), and answers
 with a `LogEnvelope` a line, refusing a line of any other kind. `bundle` answers
 with a `BundleFile`: a support bundle's name, bytes and type.
 
-A read (`read`, `capabilities`, `logs`, `bundle` and `job`) is asked twice more
+`poster` and `backdrop` answer with a `Picture`, a title's image as its bytes
+and media type, read by the id the shelf lists the title under. They take
+`member` and `defaults`, as the title read does:
+
+```python
+poster = client.poster(title_id, {"member": "ada"})
+poster.content  # the image, as delivered
+poster.media_type  # "image/webp"
+```
+
+A picture is one of `PICTURE_TYPES` (JPEG, PNG, WebP, GIF and AVIF, never SVG)
+and at most `PICTURE_MOST` bytes, 2 MiB. Any other answer raises
+`UnreadableResponseError`. The client reads no further than one byte past the
+limit, and none of an answer that states a longer length. A title outside the member's limits raises
+`MissingError` with `PLAY-2`, and a title with no picture of that kind raises
+`MissingError` with `PLAY-9`.
+
+A read (`read`, `capabilities`, `logs`, `bundle`, `poster`, `backdrop` and `job`) is asked twice more
 where nothing answered or a gateway in front of the stack answered 502, 503 or
 504, a quarter of a second later and then half a second, every attempt within
 the client's `timeout`.

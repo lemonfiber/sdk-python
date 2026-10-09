@@ -11,6 +11,7 @@ import pytest
 
 from lemonfiber import (
     CREDENTIAL_HEADER,
+    PICTURE_MOST,
     Address,
     ApiVersionMismatchError,
     AsyncClient,
@@ -38,7 +39,7 @@ from lemonfiber import (
 )
 from tests.conftest import PRINTED
 from tests.drivers import admitted, connect
-from tests.stack import Reply, envelope, problem
+from tests.stack import Reply, Streamed, envelope, problem
 
 if TYPE_CHECKING:
     from tests.drivers import Driver, Flavour
@@ -354,6 +355,117 @@ def test_a_bundle_name_is_one_path_segment(client: Driver, stack: Stack) -> None
     with pytest.raises(MissingError):
         client.bundle("../etc")
     assert stack.arrived[0].path == "/api/bundle/../etc"
+
+
+A_PICTURE = b"\x89PNG\r\n\x1a\n"
+
+
+def test_a_poster_is_handed_over_as_the_raster_image_it_is(client: Driver, stack: Stack) -> None:
+    stack.reply(
+        "GET",
+        "/api/held/4f2a9c/poster",
+        Reply(body=A_PICTURE, headers={"Content-Type": "IMAGE/PNG; q=1"}),
+    )
+    poster = client.poster("4f2a9c", {"member": "ana"})
+    assert (poster.content, poster.media_type) == (A_PICTURE, "image/png")
+    assert stack.arrived[0].query == [("member", "ana")]
+    assert stack.arrived[0].headers["Accept"] == "image/jpeg, image/png, image/webp, image/gif, image/avif"
+
+
+def test_a_backdrop_is_read_where_a_backdrop_is(client: Driver, stack: Stack) -> None:
+    stack.reply("GET", "/api/held/81/backdrop", Reply(body=A_PICTURE, headers={"Content-Type": "image/webp"}))
+    assert client.backdrop("81", {"member": "ben"}).media_type == "image/webp"
+    assert stack.arrived[0].query == [("member", "ben")]
+
+
+@pytest.mark.parametrize("label", ["image/svg+xml", "text/html", "image/pngx"])
+def test_an_answer_that_is_not_a_raster_picture_is_refused(client: Driver, stack: Stack, label: str) -> None:
+    stack.reply("GET", "/api/held/81/poster", Reply(body=A_PICTURE, headers={"Content-Type": label}))
+    with pytest.raises(UnreadableResponseError) as refused:
+        client.poster("81")
+    assert refused.value.what == (
+        f"the picture is labelled {label!r}, and a picture is one of "
+        "image/jpeg, image/png, image/webp, image/gif, image/avif"
+    )
+
+
+def test_a_picture_of_the_most_a_picture_is_is_kept_and_one_declared_byte_more_is_refused(
+    client: Driver,
+    stack: Stack,
+) -> None:
+    most = b"x" * PICTURE_MOST
+    stack.reply("GET", "/api/held/81/poster", Reply(body=most, headers={"Content-Type": "image/jpeg"}))
+    stack.reply(
+        "GET",
+        "/api/held/81/backdrop",
+        Reply(body=most + b"x", headers={"Content-Type": "image/jpeg"}),
+    )
+    assert client.poster("81").content == most
+    with pytest.raises(UnreadableResponseError) as refused:
+        client.backdrop("81")
+    assert (
+        refused.value.what
+        == f"the picture is larger than the {PICTURE_MOST} bytes a picture is at most, and none of it was kept"
+    )
+
+
+def test_a_picture_streamed_past_the_most_a_picture_is_is_refused_without_waiting_for_the_rest(
+    client: Driver,
+    stack: Stack,
+) -> None:
+    half = b"x" * (PICTURE_MOST // 2)
+    chunks = [(0.0, half), (0.05, half), (0.05, b"x"), (0.05, half)]
+    streamed = Streamed(chunks=chunks, hold=60.0, headers={"Content-Type": "image/png"})
+    stack.reply("GET", "/api/held/81/poster", streamed)
+    with pytest.raises(UnreadableResponseError):
+        client.poster("81")
+
+
+def test_a_read_leaves_its_connection_for_the_next_request(client: Driver, stack: Stack) -> None:
+    stack.reply("GET", "/api/status", Reply(body=envelope("status", {})))
+    client.read(Read.STATUS)
+    client.read(Read.STATUS)
+    assert stack.arrived[0].peer == stack.arrived[1].peer
+
+
+def test_a_picture_read_to_its_end_leaves_its_connection_for_the_next_request(
+    client: Driver,
+    stack: Stack,
+) -> None:
+    stack.reply("GET", "/api/held/81/poster", Reply(body=A_PICTURE, headers={"Content-Type": "image/png"}))
+    stack.reply("GET", "/api/status", Reply(body=envelope("status", {})))
+    client.poster("81")
+    client.read(Read.STATUS)
+    assert stack.arrived[0].peer == stack.arrived[1].peer
+
+
+def test_a_picture_left_part_read_is_not_asked_over_again(client: Driver, stack: Stack) -> None:
+    larger = b"x" * (PICTURE_MOST + 1)
+    stack.reply("GET", "/api/held/81/poster", Reply(body=larger, headers={"Content-Type": "image/png"}))
+    stack.reply("GET", "/api/status", Reply(body=envelope("status", {})))
+    with pytest.raises(UnreadableResponseError):
+        client.poster("81")
+    client.read(Read.STATUS)
+    assert stack.arrived[0].peer != stack.arrived[1].peer
+
+
+@pytest.mark.parametrize("code", ["PLAY-2", "PLAY-9"])
+def test_a_picture_nobody_may_see_or_nobody_has_is_missing_with_its_code(
+    client: Driver,
+    stack: Stack,
+    code: str,
+) -> None:
+    stack.reply("GET", "/api/held/81/poster", Reply(404, problem(code, "There is nothing to show.")))
+    with pytest.raises(MissingError) as refused:
+        client.poster("81", {"member": "ana"})
+    assert refused.value.code == code
+
+
+@pytest.mark.parametrize("title", ["", ".", ".."])
+def test_a_title_id_that_names_no_segment_sends_nothing(client: Driver, stack: Stack, title: str) -> None:
+    with pytest.raises(MisaskedError):
+        client.poster(title)
+    assert stack.arrived == []
 
 
 def test_an_action_is_posted_once_with_its_arguments(client: Driver, stack: Stack) -> None:

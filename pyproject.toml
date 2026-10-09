@@ -92,7 +92,11 @@ also_copy = ["contract/", "scripts/", "ruff.toml"]
 pytest_add_cli_args_test_selection = ["tests/", "--ignore=tests/test_architecture.py"]
 # `typing.cast` has no effect at run time, so a mutant of its type argument is one
 # no test could tell apart. A line holding a cast holds nothing else to mutate.
-do_not_mutate_patterns = ["\\bcast\\("]
+#
+# urllib3 reads `preload_content` for its truth alone, so `None` and `False` are
+# one answer to it and the mutant swapping them is the same program. Every
+# answer is read after the call, so the line holds nothing else to mutate.
+do_not_mutate_patterns = ["\\bcast\\(", "^\\s*preload_content=False,$"]
 
 [tool.lemonfiber.mutation]
 # The share of mutants the suite must tell apart from the code, as a percentage.

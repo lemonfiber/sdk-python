@@ -66,6 +66,8 @@ class Streamed:
     hold: float = 0.0
     abort: bool = False
     """Whether the connection is cut rather than the stream ended."""
+    headers: Mapping[str, str] = field(default_factory=dict[str, str])
+    """Headers sent beside, or in place of, the event stream's own. The body is sent chunked, so no length."""
 
 
 def event(kind: str, data: object, event_id: str | None = None, version: int = API_VERSION) -> bytes:
@@ -87,6 +89,8 @@ class Arrived:
     query: Sequence[tuple[str, str]]
     headers: Mapping[str, str]
     body: bytes
+    peer: object = None
+    """Where the connection it came over was opened from, so two requests can be told to share one."""
 
     @property
     def url(self) -> str:
@@ -131,7 +135,14 @@ class Stack:
     async def _handle(self, request: web.Request) -> web.StreamResponse:
         body = await request.read()
         self.arrived.append(
-            Arrived(request.method, request.path, list(request.query.items()), dict(request.headers), body),
+            Arrived(
+                request.method,
+                request.path,
+                list(request.query.items()),
+                dict(request.headers),
+                body,
+                None if request.transport is None else request.transport.get_extra_info("peername"),
+            ),
         )
         queued = self._replies.get((request.method, request.path))
         if not queued:
@@ -146,7 +157,7 @@ class Stack:
         return web.Response(status=reply.status, body=content, headers=headers)
 
     async def _stream(self, request: web.Request, reply: Streamed) -> web.StreamResponse:
-        response = web.StreamResponse(headers={"Content-Type": "text/event-stream"})
+        response = web.StreamResponse(headers={"Content-Type": "text/event-stream", **reply.headers})
         await response.prepare(request)
         for delay, chunk in reply.chunks:
             await asyncio.sleep(delay)
