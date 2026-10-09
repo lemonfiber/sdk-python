@@ -1,6 +1,7 @@
 # Copyright (c) 2026 NightWorksIO
 """What goes on the wire, exactly, what each answer is read as, and how the transports are built to carry it."""
 
+import asyncio
 import io
 import json
 from http import HTTPMethod, HTTPStatus
@@ -8,6 +9,7 @@ from http import HTTPMethod, HTTPStatus
 import aiohttp
 import pytest
 import urllib3
+from aiohttp.base_protocol import BaseProtocol
 from urllib3.connection import HTTPConnection
 
 from lemonfiber import Address, Credential, Read, _aio, _sync
@@ -121,6 +123,7 @@ def test_an_answer_declares_more_than_it_may_be_only_by_a_whole_length_past_it(
     over: bool,
 ) -> None:
     assert calls.declared_over({"content-length": length}, most) is over
+    assert calls.declared_over({}, most) is False
 
 
 def sent(body: bytes, headers: dict[str, str] | None = None) -> urllib3.HTTPResponse:
@@ -158,17 +161,62 @@ def test_a_capped_answer_is_read_one_byte_past_its_most_and_no_further(
     assert (response.connection is None) is pooled
 
 
+async def fed(chunks: list[bytes], headers: dict[str, str], most: int) -> tuple[bytes, bytes]:
+    """Return what `capped` keeps of a body arriving a chunk at a time, and what it left unread."""
+    loop = asyncio.get_running_loop()
+    connected = BaseProtocol(loop)
+    connected.connection_made(asyncio.Transport())
+    content = aiohttp.StreamReader(connected, 2**16, loop=loop)
+
+    async def arriving() -> None:
+        for chunk in chunks:
+            content.feed_data(chunk)
+            await asyncio.sleep(0)
+        content.feed_eof()
+
+    feeding = asyncio.create_task(arriving())
+    kept = await _aio.capped(headers, content, most)
+    await feeding
+    return kept, await content.read()
+
+
+@pytest.mark.parametrize(
+    ("chunks", "kept", "left"),
+    [
+        ([b"a" * 5] * 4, b"a" * 11, b"a" * 9),
+        ([b"a" * 4, b"a" * 6], b"a" * 10, b""),
+        ([], b"", b""),
+    ],
+)
+def test_a_body_streamed_is_kept_one_byte_past_its_most_and_no_further(
+    chunks: list[bytes],
+    kept: bytes,
+    left: bytes,
+) -> None:
+    assert asyncio.run(fed(chunks, {}, 10)) == (kept, left)
+
+
+def test_a_body_streamed_whose_headers_declare_too_much_is_not_read() -> None:
+    assert asyncio.run(fed([b"a" * 5] * 4, {"content-length": "20"}, 10)) == (b"", b"a" * 20)
+
+
+def test_a_picture_is_a_read_and_asked_again_after_a_passing_failure() -> None:
+    assert operation.picture(HELD_ID_POSTER, "t", None).again is True
+
+
 def test_a_picture_with_no_label_is_refused_as_one() -> None:
+    unlabelled = calls.Answer(200, {}, b"z")
     with pytest.raises(UnreadableResponseError) as refused:
-        answers.picture_of(calls.Answer(200, {}, b"z"))
+        answers.picture_of(unlabelled)
     assert refused.value.what.startswith(
         "the picture is labelled no type, and a picture is one of image/jpeg",
     )
 
 
 def test_a_picture_refused_is_the_refusal_it_is() -> None:
+    absent = calls.Answer(404, {"content-type": "text/plain"}, b"No such title.")
     with pytest.raises(MissingError):
-        answers.picture_of(calls.Answer(404, {"content-type": "text/plain"}, b"No such title."))
+        answers.picture_of(absent)
 
 
 def test_the_credential_is_added_to_a_calls_headers_alone() -> None:

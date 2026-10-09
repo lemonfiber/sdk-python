@@ -1,7 +1,6 @@
 # Copyright (c) 2026 NightWorksIO
 """What a request carries, and the answer a transport hands back."""
 
-import dataclasses
 import json
 import urllib.parse
 from collections.abc import Mapping, Sequence
@@ -79,8 +78,8 @@ def received(status: int, headers: Mapping[str, str], body: bytes) -> Answer:
 
 def declared_over(headers: Mapping[str, str], most: int) -> bool:
     """Tell whether an answer's `Content-Length` declares more than `most` bytes, its headers read without regard to case."""
-    length = headers.get("content-length", "")
-    return length.isdecimal() and int(length) > most
+    length = headers.get("content-length")
+    return length is not None and length.isdecimal() and int(length) > most
 
 
 def segment(name: str) -> str:
@@ -114,7 +113,7 @@ def written(value: Scalar) -> str:
 
 def with_credential(call: Call, credential: Credential) -> Call:
     """Return the call carrying the credential in its header."""
-    return dataclasses.replace(call, headers={**call.headers, **credential.header()})
+    return Call(call.method, call.path, {**call.headers, **credential.header()}, call.body, call.most)
 
 
 def filled_in(read: Read, query: Query | None) -> tuple[str, Query]:

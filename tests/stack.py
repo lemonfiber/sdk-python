@@ -89,6 +89,8 @@ class Arrived:
     query: Sequence[tuple[str, str]]
     headers: Mapping[str, str]
     body: bytes
+    peer: object = None
+    """Where the connection it came over was opened from, so two requests can be told to share one."""
 
     @property
     def url(self) -> str:
@@ -133,7 +135,14 @@ class Stack:
     async def _handle(self, request: web.Request) -> web.StreamResponse:
         body = await request.read()
         self.arrived.append(
-            Arrived(request.method, request.path, list(request.query.items()), dict(request.headers), body),
+            Arrived(
+                request.method,
+                request.path,
+                list(request.query.items()),
+                dict(request.headers),
+                body,
+                None if request.transport is None else request.transport.get_extra_info("peername"),
+            ),
         )
         queued = self._replies.get((request.method, request.path))
         if not queued:

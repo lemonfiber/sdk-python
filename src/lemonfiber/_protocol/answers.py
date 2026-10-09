@@ -61,10 +61,10 @@ def picture_of(answer: Answer) -> Picture:
     if declared_over(answer.headers, PICTURE_MOST) or len(answer.body) > PICTURE_MOST:
         msg = f"the picture is larger than the {PICTURE_MOST} bytes a picture is at most, and none of it was kept"
         raise UnreadableResponseError(msg)
-    labelled = answer.headers.get("content-type")
-    media_type = (labelled or "").split(";", 1)[0].strip().lower()
+    labelled = answer.headers.get("content-type", "")
+    media_type = labelled.partition(";")[0].strip().lower()
     if media_type not in PICTURE_TYPES:
-        shown = "no type" if labelled is None else repr(labelled)
+        shown = repr(labelled) if labelled else "no type"
         msg = f"the picture is labelled {shown}, and a picture is one of {', '.join(PICTURE_TYPES)}"
         raise UnreadableResponseError(msg)
     return Picture(answer.body, media_type)

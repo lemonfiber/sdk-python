@@ -193,7 +193,7 @@ def test_listed_refusals_are_generated_with_what_the_contract_says_of_each(tmp_p
     assert typing.get_args(module.RefusalCode.__value__) == ("ADMIT-4", "READ-1")
 
 
-def test_each_familys_refusals_are_a_module_of_their_own_gathered_into_one_list(
+def test_the_refusals_of_each_family_are_a_module_of_their_own_gathered_into_one_list(
     tmp_path: pathlib.Path,
 ) -> None:
     refusals = {

@@ -118,7 +118,11 @@ async def attempt(
             raise_for_status=False,
             timeout=limit,
         ) as response:
-            body = await response.read() if call.most is None else await capped(response, call.most)
+            body = (
+                await response.read()
+                if call.most is None
+                else await capped(response.headers, response.content, call.most)
+            )
     except aiohttp.ServerFingerprintMismatch, aiohttp.ClientSSLError:
         failure: LemonfiberError = CertificateRefusedError(CERTIFICATE_REFUSED)
     except aiohttp.ClientConnectorError:
@@ -130,17 +134,17 @@ async def attempt(
     raise failure
 
 
-async def capped(response: aiohttp.ClientResponse, most: int) -> bytes:
-    """Return at most one byte past `most` of an answer, and none of one that declares more.
+async def capped(headers: Mapping[str, str], content: aiohttp.StreamReader, most: int) -> bytes:
+    """Return at most one byte past `most` of an answer's body, and none of one whose headers declare more.
 
-    A connection read to its end is kept for the next request; one left part-read is closed.
+    What is left unread is aiohttp's to deal with: a connection whose answer was not
+    read to its end is closed when the answer is let go, not kept for the next request.
     """
+    if declared_over(headers, most):
+        return b""
     kept = bytearray()
-    if not declared_over(response.headers, most):
-        while len(kept) <= most and (chunk := await response.content.read(most + 1 - len(kept))):
-            kept += chunk
-    if not response.content.at_eof():
-        response.close()
+    while len(kept) <= most and (chunk := await content.read(most + 1 - len(kept))):
+        kept += chunk
     return bytes(kept)
 
 

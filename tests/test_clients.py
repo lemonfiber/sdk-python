@@ -374,7 +374,8 @@ def test_a_poster_is_handed_over_as_the_raster_image_it_is(client: Driver, stack
 
 def test_a_backdrop_is_read_where_a_backdrop_is(client: Driver, stack: Stack) -> None:
     stack.reply("GET", "/api/held/81/backdrop", Reply(body=A_PICTURE, headers={"Content-Type": "image/webp"}))
-    assert client.backdrop("81").media_type == "image/webp"
+    assert client.backdrop("81", {"member": "ben"}).media_type == "image/webp"
+    assert stack.arrived[0].query == [("member", "ben")]
 
 
 @pytest.mark.parametrize("label", ["image/svg+xml", "text/html", "image/pngx"])
@@ -408,12 +409,44 @@ def test_a_picture_of_the_most_a_picture_is_is_kept_and_one_declared_byte_more_i
     )
 
 
-def test_a_picture_streamed_past_the_most_a_picture_is_is_refused(client: Driver, stack: Stack) -> None:
-    half = b"x" * (PICTURE_MOST // 2 + 1)
-    chunks = [(0.0, half), (0.0, half), (0.0, half)]
-    stack.reply("GET", "/api/held/81/poster", Streamed(chunks=chunks, headers={"Content-Type": "image/png"}))
+def test_a_picture_streamed_past_the_most_a_picture_is_is_refused_without_waiting_for_the_rest(
+    client: Driver,
+    stack: Stack,
+) -> None:
+    half = b"x" * (PICTURE_MOST // 2)
+    chunks = [(0.0, half), (0.05, half), (0.05, b"x"), (0.05, half)]
+    streamed = Streamed(chunks=chunks, hold=60.0, headers={"Content-Type": "image/png"})
+    stack.reply("GET", "/api/held/81/poster", streamed)
     with pytest.raises(UnreadableResponseError):
         client.poster("81")
+
+
+def test_a_read_leaves_its_connection_for_the_next_request(client: Driver, stack: Stack) -> None:
+    stack.reply("GET", "/api/status", Reply(body=envelope("status", {})))
+    client.read(Read.STATUS)
+    client.read(Read.STATUS)
+    assert stack.arrived[0].peer == stack.arrived[1].peer
+
+
+def test_a_picture_read_to_its_end_leaves_its_connection_for_the_next_request(
+    client: Driver,
+    stack: Stack,
+) -> None:
+    stack.reply("GET", "/api/held/81/poster", Reply(body=A_PICTURE, headers={"Content-Type": "image/png"}))
+    stack.reply("GET", "/api/status", Reply(body=envelope("status", {})))
+    client.poster("81")
+    client.read(Read.STATUS)
+    assert stack.arrived[0].peer == stack.arrived[1].peer
+
+
+def test_a_picture_left_part_read_is_not_asked_over_again(client: Driver, stack: Stack) -> None:
+    larger = b"x" * (PICTURE_MOST + 1)
+    stack.reply("GET", "/api/held/81/poster", Reply(body=larger, headers={"Content-Type": "image/png"}))
+    stack.reply("GET", "/api/status", Reply(body=envelope("status", {})))
+    with pytest.raises(UnreadableResponseError):
+        client.poster("81")
+    client.read(Read.STATUS)
+    assert stack.arrived[0].peer != stack.arrived[1].peer
 
 
 @pytest.mark.parametrize("code", ["PLAY-2", "PLAY-9"])
