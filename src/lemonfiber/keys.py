@@ -21,7 +21,7 @@ KEY_LINK: Final = "lemonfiber://key"
 LINKED: Final = ("address", "fingerprint", "stack", "expires", "claim")
 """The parameters a key link carries, each once, and no others."""
 
-WHOLE_SECONDS: Final = re.compile(r"^[0-9]+$")
+WHOLE_SECONDS: Final = re.compile(r"^\d+$", re.ASCII)
 """How a key link writes when its claim lapses: whole seconds since 1970, in UTC."""
 
 
@@ -58,15 +58,12 @@ class KeyLink:
             self._address = Address(said["address"], pin=self._pin)
         except ConfigurationError as unusable:
             raise KeyLinkRefusedError(str(unusable)) from None
-        if not WHOLE_SECONDS.match(said["expires"]):
-            msg = "A key link says when its claim lapses in whole seconds; this one does not."
-            raise KeyLinkRefusedError(msg)
         if not VISIBLE.match(said["claim"]) or not said["stack"]:
             msg = "A key link names its stack and carries a claim; this one is missing one of them."
             raise KeyLinkRefusedError(msg)
+        self._lapses = lapsing(said["expires"])
         self._stack = said["stack"]
         self._claim = said["claim"]
-        self._lapses = datetime.datetime.fromtimestamp(int(said["expires"]), tz=datetime.UTC)
 
     @property
     def address(self) -> Address:
@@ -102,16 +99,24 @@ class KeyLink:
         return f"KeyLink({self._address.base!r}, stack={self._stack!r}, lapses={self._lapses.isoformat()!r})"
 
 
+def lapsing(written: str) -> datetime.datetime:
+    """Return when a key link says its claim lapses, refusing what is not whole seconds a date can hold."""
+    try:
+        if WHOLE_SECONDS.match(written):
+            return datetime.datetime.fromtimestamp(int(written), tz=datetime.UTC)
+    except OverflowError, ValueError, OSError:
+        pass
+    msg = "A key link says when its claim lapses in whole seconds; this one does not."
+    raise KeyLinkRefusedError(msg)
+
+
 def parameters(link: str) -> dict[str, str]:
     """Return each parameter a key link carries, refusing a link that is not one or carries anything else."""
     begins, _, query = link.partition("?")
     if begins != KEY_LINK:
         msg = f"A key link begins with {KEY_LINK}; this one does not."
         raise KeyLinkRefusedError(msg)
-    try:
-        pairs = urllib.parse.parse_qsl(query, keep_blank_values=True, strict_parsing=True)
-    except ValueError:
-        pairs = []
+    pairs = urllib.parse.parse_qsl(query, keep_blank_values=True)
     said = dict(pairs)
     if sorted(name for name, _ in pairs) != sorted(LINKED):
         msg = f"A key link carries {', '.join(LINKED)}, each once, and nothing else; this one does not."

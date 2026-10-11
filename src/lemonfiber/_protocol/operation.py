@@ -116,7 +116,7 @@ def keys() -> Operation[KeysEnvelope]:
 def mint(minting: Minting) -> Operation[MintedKeyEnvelope]:
     """Mint one integration key, its secret in this answer and in no other."""
     return Operation(
-        mint_call(minting, claim=False),
+        mint_call(minting),
         lambda answer: expect(envelope_of(answer), "minted-key"),
     )
 

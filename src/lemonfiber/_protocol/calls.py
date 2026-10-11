@@ -197,15 +197,15 @@ def keys_call() -> Call:
     return Call(HTTPMethod.GET, KEYS, {"Accept": JSON_TYPE})
 
 
-def mint_call(minting: Minting, *, claim: bool) -> Call:
-    """Mint one integration key, as a claim where `claim` is true, giving the minter's password again."""
+def mint_call(minting: Minting, **more: Json) -> Call:
+    """Mint one integration key, giving the minter's password again, with `more` beside it in the body."""
     asked: dict[str, Json] = {
         "name": minting.name,
         "scope": minting.scope,
         "purpose": minting.purpose,
         "password": minting.password,
     }
-    return posted(KEYS, {**asked, "claim": True} if claim else asked)
+    return posted(KEYS, {**asked, **more})
 
 
 def revoke_call(name: str) -> Call:
