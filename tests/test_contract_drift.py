@@ -21,10 +21,9 @@ def vendor(root: pathlib.Path, files: dict[str, object]) -> None:
     (root / "contract/VERSION").write_text("v1.0.0\n", encoding="utf-8")
 
 
-def compared(root: pathlib.Path, served: dict[str, object], *, gate: bool = False) -> int:
+def compared(root: pathlib.Path, served: dict[str, object]) -> int:
     """Compare what is vendored under `root` with a revision serving these files."""
-    arguments = [contract_drift.GATE, REVISION] if gate else [REVISION]
-    return contract_drift.run(arguments, root, lambda _: tarball(served))
+    return contract_drift.run([REVISION], root, lambda _: tarball(served))
 
 
 @pytest.mark.parametrize("files", [SINGLE, SPLIT], ids=["single", "directory"])
@@ -115,71 +114,12 @@ def test_files_that_are_not_json_are_compared_as_bytes(tmp_path: pathlib.Path) -
     assert compared(tmp_path, {**SPLIT, "contract/web-api/notes.txt": b"other {"}) == contract_drift.BEHIND
 
 
-def test_the_gate_says_what_differs_and_how_to_take_it_where_the_pull_request_reads_it(
-    tmp_path: pathlib.Path,
-    capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    summary = tmp_path / "summary.md"
-    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
-    vendor(tmp_path, SPLIT)
-    index = {
-        "api_version": 1,
-        "kinds": {"pull": "kinds/pull.json", "word": "kinds/word.json"},
-        "reads": "reads.json",
-    }
-    served = {**SPLIT, "contract/web-api/index.json": index}
-    assert compared(tmp_path, served, gate=True) == contract_drift.BEHIND
-    out = capsys.readouterr().out
-    written = summary.read_text(encoding="utf-8")
-    for said in [
-        "## The vendored contract is behind",
-        "- vendored at `v1.0.0`: api_version 1, 2 kinds",
-        f"- served at lemonfiber `{REVISION}`: api_version 1, 2 kinds",
-        "- described by the server and not here: word",
-        "- described here and not by the server: start",
-        "- contract/web-api/index.json: holds something else",
-        f"uv run just sync {REVISION}",
-    ]:
-        assert said in written
-        assert said in out
-    assert f"::error::the vendored contract is behind lemonfiber {REVISION}" in out
-    assert "::error::" not in written
-
-
-def test_the_gate_says_a_current_copy_is_current_where_the_pull_request_reads_it(
-    tmp_path: pathlib.Path,
-    capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    summary = tmp_path / "summary.md"
-    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
-    vendor(tmp_path, SINGLE)
-    assert compared(tmp_path, SINGLE, gate=True) == contract_drift.CURRENT
-    said = f"It matches the one lemonfiber `{REVISION}` describes, vendored at `v1.0.0`."
-    assert said in summary.read_text(encoding="utf-8")
-    assert said in capsys.readouterr().out
-
-
-def test_the_gate_without_a_summary_to_write_prints_alone(
-    tmp_path: pathlib.Path,
-    capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.delenv("GITHUB_STEP_SUMMARY", raising=False)
-    vendor(tmp_path, SINGLE)
-    (tmp_path / "contract/VERSION").unlink()
-    assert compared(tmp_path, SPLIT, gate=True) == contract_drift.BEHIND
-    assert "- vendored at `no revision`: api_version 1, 2 kinds" in capsys.readouterr().out
-
-
 @pytest.mark.parametrize(
     "arguments",
     [
         [],
         ["main"],
-        [contract_drift.GATE],
-        [contract_drift.GATE, "main"],
+        ["--gate", REVISION],
         [REVISION, REVISION],
         ["--loud", REVISION],
     ],

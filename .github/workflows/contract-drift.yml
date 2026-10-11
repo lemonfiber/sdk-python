@@ -1,69 +1,27 @@
-# The vendored contract is a copy, and a copy goes stale in silence.
-#
-# `just contract-check` regenerates the shapes from the *vendored* artefact and
-# diffs the result, so it proves this package agrees with itself and says nothing
-# about what it agrees with. There is no dependency on lemonfiber to bump, and
-# `api_version` describes the envelope rather than the set of kinds inside it, so
-# a client generated from a stale artefact parses every reply it understands and
-# has no type for the rest. This compares the copy with what the server serves,
-# runs on pull requests, fails them, and `main` requires it (`Q-R68`).
-#
-# The pin is meant to lag, and gating it does refuse pull requests that have
-# nothing to do with the contract. That is the trade, taken deliberately: the
-# stretch it refuses is the stretch this package would spend shipping against an
-# artefact it has been told is wrong. What makes it payable is that a failure
-# hands over the remedy rather than the diagnosis (`Q-R70`) — two commands, with
-# the revision already filled in, printed where the author reads the failure.
+# The vendored contract, held against the one lemonfiber's main serves. The comparison is spec's shared `upstream-drift` (Q-R68,
+# Q-R70), which writes what it found and the command that takes it to the run's
+# summary as well as the log.
 name: contract-drift
 on:
   pull_request:
   workflow_dispatch:
   schedule:
-    # Weekly, as the floor: a pull request is what usually asks the question,
-    # and this catches a `main` that went a week without one while the server
-    # moved.
+    # Weekly, as the floor: a pull request is what usually asks the question.
     - cron: "20 7 * * 1"
-
 permissions:
   contents: read
-
 # A pull request pushed again cancels the run on its old head, which nobody
 # will read and which holds runners the org shares (Q-R75). Every other event
 # is grouped by its own run, so it is never cancelled and never cancels.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: true
-
 jobs:
   contract-drift:
-    name: contract-drift
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
-
-      - name: Compare the vendored contract with the one the server describes
-        env:
-          LEMONFIBER: https://github.com/lemonfiber/lemonfiber.git
-          UV_LOCKED: "1"
-          UV_NO_BUILD: "1"
-        run: |
-          set -euo pipefail
-
-          # The revision is resolved first and the contract fetched at it, so the
-          # comparison and the command printed to fix it name the same commit.
-          # Fetching `main` twice would let it move in between, and the remedy
-          # would then be for a contract nobody compared.
-          head=$(git ls-remote "$LEMONFIBER" refs/heads/main | cut -f1)
-
-          # The script fetches the tarball of that revision over HTTPS alone,
-          # takes the contract from it in whichever layout the revision holds,
-          # and compares it with the vendored copy file by file. On a difference
-          # it names the files, writes the verdict and the remedy to the run's
-          # summary, where a required check is read from the pull request, and
-          # fails.
-          uv run --locked --no-build python -m scripts.contract_drift --gate "$head"
+    uses: lemonfiber/spec/.github/workflows/upstream-drift.yml@164464d71266bdc36d90272c58eb8bd02f1ba10d # v1.0.80
+    with:
+      lock: "vendored"
+      upstream: "lemonfiber"
+      revision: "contract/VERSION"
+      copies: "contract/web-api:contract/web-api"
+      remedy: "run `uv run just sync {head}` then `uv run just generate`, and commit contract/ and src/lemonfiber/_generated"
