@@ -386,7 +386,7 @@ def test_a_found_titles_poster_is_read_where_a_search_lists_it(client: Driver, s
     )
     poster = client.askable_poster("603", {"member": "ana", "kind": "movies"})
     assert (poster.content, poster.media_type) == (A_PICTURE, "image/jpeg")
-    assert stack.arrived[0].query == [("member", "ana"), ("kind", "film")]
+    assert stack.arrived[0].query == [("member", "ana"), ("kind", "movies")]
     assert stack.arrived[0].headers["Accept"] == "image/jpeg, image/png, image/webp, image/gif, image/avif"
 
 
