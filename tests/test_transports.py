@@ -15,11 +15,13 @@ from lemonfiber import (
     Address,
     AsyncClient,
     Credential,
+    KeyLink,
     Read,
     StreamLostError,
     SyncClient,
     UnreachableError,
     admit_async,
+    collect_async,
 )
 from lemonfiber._aio import STRAIGHT
 from lemonfiber._protocol.calls import DEFAULT_TIMEOUT
@@ -147,6 +149,33 @@ def test_an_asynchronous_offer_waits_as_long_as_a_call_does(monkeypatch: pytest.
         await knock(aiohttp.ClientSession())
 
     alone = knock(None)
+    with pytest.raises(UnreachableError):
+        asyncio.run(alone)
+    through_a_session = given()
+    with pytest.raises(UnreachableError):
+        asyncio.run(through_a_session)
+    assert [timeout_of(options) for options in sent] == [aiohttp.ClientTimeout(total=DEFAULT_TIMEOUT)] * 2
+
+
+def test_an_asynchronous_collection_waits_as_long_as_a_call_does(monkeypatch: pytest.MonkeyPatch) -> None:
+    sent = recording_aiohttp(monkeypatch)
+    link = KeyLink(
+        "lemonfiber://key?address=https%3A%2F%2F127.0.0.1%3A1&fingerprint="
+        + "ab" * 32
+        + "&stack=stack-1f6a&expires=4102444800&claim=lfc_x",
+    )
+
+    async def collecting(session: aiohttp.ClientSession | None) -> None:
+        try:
+            await collect_async(link, session=session)
+        finally:
+            if session is not None:
+                await session.close()
+
+    async def given() -> None:
+        await collecting(aiohttp.ClientSession())
+
+    alone = collecting(None)
     with pytest.raises(UnreachableError):
         asyncio.run(alone)
     through_a_session = given()

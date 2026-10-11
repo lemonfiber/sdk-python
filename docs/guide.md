@@ -57,6 +57,38 @@ A `Credential` is one of:
 It travels in the `X-Lemonfiber-Token` header and never in a URL, and its `repr`
 shows none of it.
 
+## Integration keys
+
+A program that runs beside the stack for months holds a key rather than the
+per-run token. `keys` lists the keys the credential may see, without their
+secrets; `mint` mints one, its secret in that answer and no other; `revoke`
+revokes one by its name. A `Minting` carries the name, the scope, the purpose and
+the minter's password, given again, which its `repr` leaves out:
+
+```python
+minting = Minting(name="home", scope="read", purpose="home-assistant", password=password)
+made = await client.mint(minting)  # a minted-key envelope; show its secret once
+await client.revoke("home")  # the keys as they now stand
+```
+
+`mint_claim` mints a key as a claim instead, answered with a `key-claim`
+envelope: no secret, but a key link, `lemonfiber://key?...`, that collects the
+key once, within ten minutes. A program holding nothing else collects it with
+`collect` or `collect_async`:
+
+```python
+link = KeyLink(scanned)  # KeyLinkRefusedError where it is not a key link
+key = collect(link)  # name, scope, purpose, secret, pin and address
+client = SyncClient(link.address, Credential(key["secret"]))  # held to the same pin
+```
+
+The claim is sent alone, with no credential, over the TLS the link's fingerprint
+verifies and over nothing a trust store vouches for. A claim already lapsed
+raises `ClaimLapsedError` and nothing is sent. A claim the stack turns away,
+because it collected its key already, lapsed or was never minted, raises
+`ClaimRefusedError` with the stack's sentence. `KeyLink`'s `repr` leaves the
+claim out, and nothing here keeps the collected secret.
+
 ## Reading
 
 `read` takes a `Read`, one member for each read the contract lists that answers
