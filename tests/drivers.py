@@ -133,6 +133,10 @@ class Driver(Protocol):
         """Fetch a backdrop."""
         ...
 
+    def askable_poster(self, title: str, query: Query | None = None) -> Picture:
+        """Fetch a found title's poster."""
+        ...
+
     def act(self, action: str, arguments: Mapping[str, Json] | None = None) -> Envelope:
         """Act."""
         ...
@@ -202,6 +206,10 @@ class SyncDriver:
     def backdrop(self, title: str, query: Query | None = None) -> Picture:
         """Fetch a backdrop."""
         return self.client.backdrop(title, query)
+
+    def askable_poster(self, title: str, query: Query | None = None) -> Picture:
+        """Fetch a found title's poster."""
+        return self.client.askable_poster(title, query)
 
     def act(self, action: str, arguments: Mapping[str, Json] | None = None) -> Envelope:
         """Act."""
@@ -285,6 +293,10 @@ class AsyncDriver:
     def backdrop(self, title: str, query: Query | None = None) -> Picture:
         """Fetch a backdrop."""
         return self.run(self.client.backdrop(title, query))
+
+    def askable_poster(self, title: str, query: Query | None = None) -> Picture:
+        """Fetch a found title's poster."""
+        return self.run(self.client.askable_poster(title, query))
 
     def act(self, action: str, arguments: Mapping[str, Json] | None = None) -> Envelope:
         """Act."""

@@ -106,7 +106,22 @@ limit, and none of an answer that states a longer length. A title outside the me
 `MissingError` with `PLAY-2`, and a title with no picture of that kind raises
 `MissingError` with `PLAY-9`.
 
-A read (`read`, `capabilities`, `logs`, `bundle`, `poster`, `backdrop` and `job`) is asked twice more
+A member searches for a title to ask for with `Read.ASKABLE`, which takes
+`member`, `term` and `after`, and asks for one with the `ask` action.
+`askable_poster` answers with a found title's poster as a `Picture`, read by
+the id the search lists it under, and takes `member` and `kind`:
+
+```python
+found = expect(client.read(Read.ASKABLE, {"member": "ada", "term": "dune"}), "askable")
+title = found["data"]["titles"][0]
+poster = client.askable_poster(title["id"], {"member": "ada", "kind": title["kind"]})
+client.act("ask", {"name": "ada", "id": title["id"], "kind": title["kind"]})
+```
+
+A title the member may not ask for raises `MissingError` with `WISH-3`, and one
+with no poster raises `MissingError` with `WISH-13`.
+
+A read (`read`, `capabilities`, `logs`, `bundle`, `poster`, `backdrop`, `askable_poster` and `job`) is asked twice more
 where nothing answered or a gateway in front of the stack answered 502, 503 or
 504, a quarter of a second later and then half a second, every attempt within
 the client's `timeout`.
