@@ -88,8 +88,8 @@ def linking(stack: Stack, *, pin: str | None = None, expires: int = LATER) -> Ke
 def test_a_key_link_is_read_as_a_claims_mint_writes_it() -> None:
     read = KeyLink(f"  {link()}\n")
     assert read.address.base == "https://192.0.2.10:7777"
-    assert read.address.pin is not None
-    assert read.address.pin.hex == A_PIN
+    assert read.address.pin == read.pin
+    assert read.pin.hex == A_PIN
     assert read.stack == "stack-1f6a"
     assert read.lapses == datetime.datetime(2100, 1, 1, tzinfo=datetime.UTC)
     assert read.claim == CLAIM

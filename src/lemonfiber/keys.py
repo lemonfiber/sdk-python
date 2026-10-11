@@ -8,7 +8,7 @@ import urllib.parse
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Final, override
 
-from lemonfiber.address import Address
+from lemonfiber.address import Address, CertificatePin
 from lemonfiber.credential import VISIBLE
 from lemonfiber.problems import ConfigurationError, KeyLinkRefusedError
 
@@ -48,13 +48,14 @@ class KeyLink:
     for. The claim is left out of the representation.
     """
 
-    __slots__ = ("_address", "_claim", "_lapses", "_stack")
+    __slots__ = ("_address", "_claim", "_lapses", "_pin", "_stack")
 
     def __init__(self, link: str) -> None:
         """Read a key link, refusing one that is not exactly what a claim's mint writes."""
         said = parameters(link.strip())
         try:
-            self._address = Address(said["address"], pin=said["fingerprint"])
+            self._pin = CertificatePin(said["fingerprint"])
+            self._address = Address(said["address"], pin=self._pin)
         except ConfigurationError as unusable:
             raise KeyLinkRefusedError(str(unusable)) from None
         if not WHOLE_SECONDS.match(said["expires"]):
@@ -71,6 +72,11 @@ class KeyLink:
     def address(self) -> Address:
         """Return where the key is collected, held to the link's fingerprint."""
         return self._address
+
+    @property
+    def pin(self) -> CertificatePin:
+        """Return the certificate the stack is held to, as the link's fingerprint names it."""
+        return self._pin
 
     @property
     def stack(self) -> str:
