@@ -11,7 +11,7 @@
 #   ci               checks, tests and coverage, mutation testing,
 #                    backward compatibility
 #   sonar            gate / gate
-#   contract-drift   contract-drift
+#   contract-drift   contract-drift / drift
 #
 # `SonarCloud Code Analysis` is required too and is posted by the SonarCloud app
 # rather than by a workflow, so it cannot be waited for by name; `gate / gate`
