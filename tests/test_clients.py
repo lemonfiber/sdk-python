@@ -378,6 +378,30 @@ def test_a_backdrop_is_read_where_a_backdrop_is(client: Driver, stack: Stack) ->
     assert stack.arrived[0].query == [("member", "ben")]
 
 
+def test_a_found_titles_poster_is_read_where_a_search_lists_it(client: Driver, stack: Stack) -> None:
+    stack.reply(
+        "GET",
+        "/api/askable/603/poster",
+        Reply(body=A_PICTURE, headers={"Content-Type": "image/jpeg"}),
+    )
+    poster = client.askable_poster("603", {"member": "ana", "kind": "movies"})
+    assert (poster.content, poster.media_type) == (A_PICTURE, "image/jpeg")
+    assert stack.arrived[0].query == [("member", "ana"), ("kind", "film")]
+    assert stack.arrived[0].headers["Accept"] == "image/jpeg, image/png, image/webp, image/gif, image/avif"
+
+
+@pytest.mark.parametrize("code", ["WISH-3", "WISH-13"])
+def test_a_found_title_nobody_may_ask_for_or_with_no_poster_is_missing_with_its_code(
+    client: Driver,
+    stack: Stack,
+    code: str,
+) -> None:
+    stack.reply("GET", "/api/askable/603/poster", Reply(404, problem(code, "There is nothing to show.")))
+    with pytest.raises(MissingError) as refused:
+        client.askable_poster("603", {"member": "ana", "kind": "movies"})
+    assert refused.value.code == code
+
+
 @pytest.mark.parametrize("label", ["image/svg+xml", "text/html", "image/pngx"])
 def test_an_answer_that_is_not_a_raster_picture_is_refused(client: Driver, stack: Stack, label: str) -> None:
     stack.reply("GET", "/api/held/81/poster", Reply(body=A_PICTURE, headers={"Content-Type": label}))
