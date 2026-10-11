@@ -36,5 +36,7 @@ requirement = [
   { id = "ARCH-R163", state = "partial", evidence = ["src/lemonfiber/capabilities.py", "src/lemonfiber/_protocol/answers.py", "tests/test_clients.py::test_what_a_stack_can_do_is_read_for_the_credential_that_asked"] },
   { id = "ARCH-R164", state = "partial", evidence = ["scripts/contract_generator/artefact.py", "tests/test_generator.py::test_the_code_an_action_refuses_a_moved_offer_with_is_generated"] },
   { id = "ARCH-R179", state = "partial", evidence = ["src/lemonfiber/capabilities.py", "src/lemonfiber/_protocol/answers.py", "tests/test_clients.py::test_every_scope_is_read_and_a_stack_with_no_identifier_names_none"] },
+  { id = "C10-R18", state = "partial", evidence = ["src/lemonfiber/keys.py", "tests/test_keys.py::test_a_key_minted_as_a_claim_asks_for_one_and_is_answered_with_its_link", "tests/test_keys.py::test_a_key_link_is_read_as_a_claims_mint_writes_it"] },
+  { id = "C10-R20", state = "partial", evidence = ["src/lemonfiber/keys.py", "tests/test_keys.py::test_a_claim_collects_its_key_over_the_tls_its_link_pins_with_no_credential", "tests/test_keys.py::test_a_claim_is_sent_nowhere_but_the_certificate_its_link_pins"] },
   { id = "G4-R15", state = "partial", evidence = ["src/lemonfiber/_protocol/retry.py", "tests/test_asked_again.py::test_a_read_is_asked_again_twice_after_passing_failures_waiting_twice_as_long_the_second_time", "tests/test_asked_again.py::test_what_changes_something_is_never_asked_again"] },
 ]

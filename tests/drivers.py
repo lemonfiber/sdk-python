@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Literal, Protocol
 
 import aiohttp
 
-from lemonfiber import AsyncClient, SyncClient, admit, admit_async
+from lemonfiber import AsyncClient, SyncClient, admit, admit_async, collect, collect_async
 from lemonfiber.address import ENCRYPTED
 
 if TYPE_CHECKING:
@@ -22,6 +22,8 @@ if TYPE_CHECKING:
         Finished,
         JobStanding,
         Json,
+        KeyLink,
+        Minting,
         Picture,
         Query,
         Read,
@@ -29,7 +31,14 @@ if TYPE_CHECKING:
     )
     from lemonfiber._aio import AsyncStream
     from lemonfiber._sync import SyncStream
-    from lemonfiber.contract import JobEnvelope, LogEnvelope
+    from lemonfiber.contract import (
+        JobEnvelope,
+        KeyClaimEnvelope,
+        KeysEnvelope,
+        LogEnvelope,
+        MintedKey,
+        MintedKeyEnvelope,
+    )
     from lemonfiber.stream import Arrival, Live, Stale
 
 SETTLE = 0.25
@@ -141,6 +150,22 @@ class Driver(Protocol):
         """Act."""
         ...
 
+    def keys(self) -> KeysEnvelope:
+        """List the keys."""
+        ...
+
+    def mint(self, minting: Minting) -> MintedKeyEnvelope:
+        """Mint a key."""
+        ...
+
+    def mint_claim(self, minting: Minting) -> KeyClaimEnvelope:
+        """Mint a key as a claim."""
+        ...
+
+    def revoke(self, name: str) -> KeysEnvelope:
+        """Revoke a key."""
+        ...
+
     def job(self, job: str) -> JobStanding:
         """Ask about a job."""
         ...
@@ -214,6 +239,22 @@ class SyncDriver:
     def act(self, action: str, arguments: Mapping[str, Json] | None = None) -> Envelope:
         """Act."""
         return self.client.act(action, arguments)
+
+    def keys(self) -> KeysEnvelope:
+        """List the keys."""
+        return self.client.keys()
+
+    def mint(self, minting: Minting) -> MintedKeyEnvelope:
+        """Mint a key."""
+        return self.client.mint(minting)
+
+    def mint_claim(self, minting: Minting) -> KeyClaimEnvelope:
+        """Mint a key as a claim."""
+        return self.client.mint_claim(minting)
+
+    def revoke(self, name: str) -> KeysEnvelope:
+        """Revoke a key."""
+        return self.client.revoke(name)
 
     def job(self, job: str) -> JobStanding:
         """Ask about a job."""
@@ -302,6 +343,22 @@ class AsyncDriver:
         """Act."""
         return self.run(self.client.act(action, arguments))
 
+    def keys(self) -> KeysEnvelope:
+        """List the keys."""
+        return self.run(self.client.keys())
+
+    def mint(self, minting: Minting) -> MintedKeyEnvelope:
+        """Mint a key."""
+        return self.run(self.client.mint(minting))
+
+    def mint_claim(self, minting: Minting) -> KeyClaimEnvelope:
+        """Mint a key as a claim."""
+        return self.run(self.client.mint_claim(minting))
+
+    def revoke(self, name: str) -> KeysEnvelope:
+        """Revoke a key."""
+        return self.run(self.client.revoke(name))
+
     def job(self, job: str) -> JobStanding:
         """Ask about a job."""
         return self.run(self.client.job(job))
@@ -364,4 +421,16 @@ def admitted(flavour: Flavour, address: Address, password: str, name: str | None
             return runner.run(admit_async(address, password, name=name))
         finally:
             if address.scheme == ENCRYPTED:
+                runner.run(asyncio.sleep(SETTLE))
+
+
+def collected(flavour: Flavour, link: KeyLink) -> MintedKey:
+    """Collect a key with a key link, with the flavour asked for."""
+    if flavour == "sync":
+        return collect(link, timeout=5.0)
+    with asyncio.Runner() as runner:
+        try:
+            return runner.run(collect_async(link))
+        finally:
+            if link.address.scheme == ENCRYPTED:
                 runner.run(asyncio.sleep(SETTLE))
