@@ -3,7 +3,7 @@
 
 import base64
 import json
-from http import HTTPMethod
+from http import HTTPMethod, HTTPStatus
 from typing import TYPE_CHECKING
 
 import pytest
@@ -25,6 +25,8 @@ from lemonfiber._protocol import calls, operation
 from tests.stack import Reply, envelope
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from tests.drivers import Driver
     from tests.stack import Stack
 
@@ -38,6 +40,7 @@ REGISTERED = {
     "registered": "2026-10-13T00:00:00Z",
 }
 LISTED: dict[str, object] = {"keys": [], "rehearsed": False}
+ONE_PROOF = "A mint is proved by the password or by a device key's signature, exactly one of the two."
 
 
 def unpadded(raw: bytes) -> str:
@@ -92,7 +95,12 @@ def test_a_device_key_answered_as_another_kind_is_refused(client: Driver, stack:
 
 def test_each_device_key_door_is_asked_as_the_core_serves_it() -> None:
     assert calls.device_keys_call() == calls.Call(HTTPMethod.GET, "/api/device-keys", ANSWERED)
-    assert calls.device_key_call("pixel", challenge=False) == calls.Call(
+    assert operation.device_key_challenge("pixel").call == calls.Call(
+        HTTPMethod.POST,
+        "/api/device-keys/pixel/challenge",
+        ANSWERED,
+    )
+    assert operation.revoke_device_key("pixel").call == calls.Call(
         HTTPMethod.DELETE,
         "/api/device-keys/pixel",
         ANSWERED,
@@ -100,8 +108,23 @@ def test_each_device_key_door_is_asked_as_the_core_serves_it() -> None:
     assert operation.device_keys().again
     assert not operation.device_key_challenge("pixel").again
     assert not operation.revoke_device_key("pixel").again
-    with pytest.raises(MisaskedError):
-        calls.device_key_call("..", challenge=True)
+
+
+@pytest.mark.parametrize("asked", [calls.device_key_challenge_call, calls.revoke_device_key_call])
+def test_a_device_key_name_a_url_would_resolve_away_is_refused_before_sending(
+    asked: Callable[[str], calls.Call],
+) -> None:
+    with pytest.raises(MisaskedError) as refused:
+        asked("..")
+    assert (refused.value.sentence, refused.value.status) == (
+        "A device key is named by its name, and what was given is not a name that can be sent.",
+        HTTPStatus.BAD_REQUEST,
+    )
+
+
+def test_bytes_are_sent_in_base64url_with_only_the_padding_dropped() -> None:
+    assert calls.base64url(b"\x00\x00\x17") == "AAAX"
+    assert calls.base64url(b"\xfb\xff") == "-_8"
 
 
 def test_a_mint_is_proved_by_a_signature_over_the_text_the_stack_verifies(
@@ -129,18 +152,22 @@ def test_a_mint_is_proved_by_a_signature_over_the_text_the_stack_verifies(
 
 def test_a_mint_is_proved_by_exactly_one_of_the_password_and_a_device_key() -> None:
     proof = DeviceProof("pixel", CHALLENGE, b"sig")
-    with pytest.raises(ConfigurationError):
+    with pytest.raises(ConfigurationError) as neither:
         Minting("den", "read", "other")
-    with pytest.raises(ConfigurationError):
+    with pytest.raises(ConfigurationError) as both:
         Minting("den", "read", "other", password=GIVEN_AGAIN, device=proof)
+    assert str(neither.value) == str(both.value) == ONE_PROOF
     shown = repr(Minting("den", "read", "other", device=proof))
     assert CHALLENGE not in shown
 
 
 @pytest.mark.parametrize(("name", "challenge"), [("den\nread", CHALLENGE), ("den", "c\nden")])
 def test_a_part_holding_a_line_feed_is_refused_rather_than_signed(name: str, challenge: str) -> None:
-    with pytest.raises(ConfigurationError):
+    with pytest.raises(ConfigurationError) as refused:
         signed_text(name, "read", "other", challenge)
+    assert str(refused.value) == (
+        "A mint's name, scope, purpose and challenge are each one line of the signed text; one holds a line feed."
+    )
 
 
 def test_a_key_mint_signs_key_as_its_last_line() -> None:

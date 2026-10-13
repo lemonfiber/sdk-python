@@ -22,7 +22,7 @@ from lemonfiber._protocol.calls import (
     bundle_call,
     capabilities_call,
     collect_call,
-    device_key_call,
+    device_key_challenge_call,
     device_keys_call,
     job_call,
     keys_call,
@@ -32,6 +32,7 @@ from lemonfiber._protocol.calls import (
     read_call,
     register_device_key_call,
     revoke_call,
+    revoke_device_key_call,
     session_call,
 )
 from lemonfiber.envelope import expect
@@ -163,7 +164,7 @@ def device_keys() -> Operation[DeviceKeysEnvelope]:
 def device_key_challenge(name: str) -> Operation[DeviceChallengeEnvelope]:
     """Ask a challenge for one device key, good for one mint from this credential within a minute."""
     return Operation(
-        device_key_call(name, challenge=True),
+        device_key_challenge_call(name),
         lambda answer: expect(envelope_of(answer), "device-challenge"),
     )
 
@@ -171,6 +172,6 @@ def device_key_challenge(name: str) -> Operation[DeviceChallengeEnvelope]:
 def revoke_device_key(name: str) -> Operation[DeviceKeysEnvelope]:
     """Revoke one device key by its name, answered with the device keys as they now stand."""
     return Operation(
-        device_key_call(name, challenge=False),
+        revoke_device_key_call(name),
         lambda answer: expect(envelope_of(answer), "device-keys"),
     )

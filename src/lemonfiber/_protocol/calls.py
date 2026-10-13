@@ -231,15 +231,22 @@ def device_keys_call() -> Call:
     return Call(HTTPMethod.GET, DEVICE_KEYS, {"Accept": JSON_TYPE})
 
 
-def device_key_call(name: str, *, challenge: bool) -> Call:
-    """Ask a challenge for one device key, or revoke it, by its name as one path segment."""
+def device_key_challenge_call(name: str) -> Call:
+    """Ask a challenge for one device key, by its name as one path segment."""
+    return Call(HTTPMethod.POST, f"{device_key_path(name)}/challenge", {"Accept": JSON_TYPE})
+
+
+def revoke_device_key_call(name: str) -> Call:
+    """Revoke one device key, by its name as one path segment."""
+    return Call(HTTPMethod.DELETE, device_key_path(name), {"Accept": JSON_TYPE})
+
+
+def device_key_path(name: str) -> str:
+    """Return the door of one device key, refusing a name a URL would resolve away."""
     if name in UNKEPT_SEGMENTS:
         sentence = "A device key is named by its name, and what was given is not a name that can be sent."
         raise MisaskedError(sentence, status=HTTPStatus.BAD_REQUEST)
-    path = f"{DEVICE_KEYS}/{segment(name)}"
-    if challenge:
-        return Call(HTTPMethod.POST, f"{path}/challenge", {"Accept": JSON_TYPE})
-    return Call(HTTPMethod.DELETE, path, {"Accept": JSON_TYPE})
+    return f"{DEVICE_KEYS}/{segment(name)}"
 
 
 def base64url(raw: bytes) -> str:
