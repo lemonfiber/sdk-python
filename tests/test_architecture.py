@@ -17,10 +17,10 @@ GENERATED = PACKAGE / "_generated"
 SHARED_GATE = ROOT / "scripts" / "no_open_codeql_alert.py"
 
 TRANSPORTS = {
-    "aiohttp": PACKAGE / "_aio.py",
+    "aiohttp": PACKAGE / "_aio",
     "urllib3": PACKAGE / "_sync.py",
 }
-"""Each HTTP library, and the one module allowed to import it."""
+"""Each HTTP library, and the one module or package allowed to import it."""
 
 SOURCES = (ROOT / "src", ROOT / "scripts")
 """Where every file is held to the source cap."""
@@ -109,7 +109,8 @@ def test_no_written_module_declares_a_response_shape(path: pathlib.Path) -> None
 @pytest.mark.parametrize("library", sorted(TRANSPORTS))
 def test_each_transport_is_imported_by_its_own_module_alone(library: str) -> None:
     importers = {path for path in python_files(PACKAGE) if library in imported(path)}
-    assert importers <= {TRANSPORTS[library]}
+    allowed = TRANSPORTS[library]
+    assert all(path == allowed or path.is_relative_to(allowed) for path in importers)
 
 
 @pytest.mark.parametrize("path", python_files(*SOURCES), ids=str)

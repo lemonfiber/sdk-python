@@ -89,6 +89,24 @@ because it collected its key already, lapsed or was never minted, raises
 `ClaimRefusedError` with the stack's sentence. `KeyLink`'s `repr` leaves the
 claim out, and nothing here keeps the collected secret.
 
+### Device keys
+
+A phone holding a key pair in its hardware registers it once as a device key,
+with the platform's attestation and the password, and from then on proves a mint
+with a signature over a challenge the stack issued, in place of the password:
+
+```python
+client.register_device_key(Registering("pixel", public_key_der, AndroidAttestation(chain_der), password))
+challenge = client.device_key_challenge("pixel")["data"]["challenge"]
+text = signed_text("den", "read", "mcp", challenge)  # ECDSA P-256 over SHA-256, in DER, by the phone
+client.mint(Minting("den", "read", "mcp", device=DeviceProof("pixel", challenge, phone_signs(text))))
+```
+
+A challenge is good for one mint from the same credential within a minute.
+`device_keys` lists the device keys and `revoke_device_key` revokes one; the
+keys it proved stay, each naming it as `proved_by` in the keys listing. `IosAttestation` carries an App Attest object
+instead, made with the SHA-256 of the public key's DER as its client data hash.
+
 ## Reading
 
 `read` takes a `Read`, one member for each read the contract lists that answers

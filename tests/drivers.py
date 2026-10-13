@@ -32,6 +32,9 @@ if TYPE_CHECKING:
     from lemonfiber._aio import AsyncStream
     from lemonfiber._sync import SyncStream
     from lemonfiber.contract import (
+        DeviceChallengeEnvelope,
+        DeviceKeyEnvelope,
+        DeviceKeysEnvelope,
         JobEnvelope,
         KeyClaimEnvelope,
         KeysEnvelope,
@@ -39,6 +42,7 @@ if TYPE_CHECKING:
         MintedKey,
         MintedKeyEnvelope,
     )
+    from lemonfiber.device_keys import Registering
     from lemonfiber.stream import Arrival, Live, Stale
 
 SETTLE = 0.25
@@ -166,6 +170,22 @@ class Driver(Protocol):
         """Revoke a key."""
         ...
 
+    def register_device_key(self, registering: Registering) -> DeviceKeyEnvelope:
+        """Register a device key."""
+        ...
+
+    def device_keys(self) -> DeviceKeysEnvelope:
+        """List the device keys."""
+        ...
+
+    def device_key_challenge(self, name: str) -> DeviceChallengeEnvelope:
+        """Ask a challenge for a device key."""
+        ...
+
+    def revoke_device_key(self, name: str) -> DeviceKeysEnvelope:
+        """Revoke a device key."""
+        ...
+
     def job(self, job: str) -> JobStanding:
         """Ask about a job."""
         ...
@@ -255,6 +275,22 @@ class SyncDriver:
     def revoke(self, name: str) -> KeysEnvelope:
         """Revoke a key."""
         return self.client.revoke(name)
+
+    def register_device_key(self, registering: Registering) -> DeviceKeyEnvelope:
+        """Register a device key."""
+        return self.client.register_device_key(registering)
+
+    def device_keys(self) -> DeviceKeysEnvelope:
+        """List the device keys."""
+        return self.client.device_keys()
+
+    def device_key_challenge(self, name: str) -> DeviceChallengeEnvelope:
+        """Ask a challenge for a device key."""
+        return self.client.device_key_challenge(name)
+
+    def revoke_device_key(self, name: str) -> DeviceKeysEnvelope:
+        """Revoke a device key."""
+        return self.client.revoke_device_key(name)
 
     def job(self, job: str) -> JobStanding:
         """Ask about a job."""
@@ -358,6 +394,22 @@ class AsyncDriver:
     def revoke(self, name: str) -> KeysEnvelope:
         """Revoke a key."""
         return self.run(self.client.revoke(name))
+
+    def register_device_key(self, registering: Registering) -> DeviceKeyEnvelope:
+        """Register a device key."""
+        return self.run(self.client.register_device_key(registering))
+
+    def device_keys(self) -> DeviceKeysEnvelope:
+        """List the device keys."""
+        return self.run(self.client.device_keys())
+
+    def device_key_challenge(self, name: str) -> DeviceChallengeEnvelope:
+        """Ask a challenge for a device key."""
+        return self.run(self.client.device_key_challenge(name))
+
+    def revoke_device_key(self, name: str) -> DeviceKeysEnvelope:
+        """Revoke a device key."""
+        return self.run(self.client.revoke_device_key(name))
 
     def job(self, job: str) -> JobStanding:
         """Ask about a job."""
