@@ -12,11 +12,18 @@ import urllib3
 from aiohttp.base_protocol import BaseProtocol
 from urllib3.connection import HTTPConnection
 
-from lemonfiber import Address, Credential, Read, _aio, _sync
+from lemonfiber import Address, Credential, Read, _sync
+from lemonfiber._aio import transport
 from lemonfiber._protocol import answers, calls, following, operation, refusals
 from lemonfiber.address import Route
 from lemonfiber.files import PICTURE_MOST
-from lemonfiber.problems import MisaskedError, MissingError, StillRunningError, UnreadableResponseError
+from lemonfiber.problems import (
+    MisaskedError,
+    MissingError,
+    StillRunningError,
+    UnreachableError,
+    UnreadableResponseError,
+)
 from lemonfiber.reads import HELD_ID_BACKDROP, HELD_ID_POSTER
 
 JSON = {"Accept": "application/json"}
@@ -175,7 +182,7 @@ async def fed(chunks: list[bytes], headers: dict[str, str], most: int) -> tuple[
         content.feed_eof()
 
     feeding = asyncio.create_task(arriving())
-    kept = await _aio.capped(headers, content, most)
+    kept = await transport.capped(headers, content, most)
     await feeding
     return kept, await content.read()
 
@@ -243,7 +250,7 @@ def test_a_refusal_whose_body_is_not_utf8_is_still_read() -> None:
 def test_an_error_envelope_whose_data_is_not_a_problem_carries_none() -> None:
     body = json.dumps({"api_version": 1, "kind": "error", "data": "words"}).encode()
     assert refusals.problem_in(body) is None
-    assert isinstance(refusals.refusal_of(calls.Answer(500, {}, body)), _aio.UnreachableError)
+    assert isinstance(refusals.refusal_of(calls.Answer(500, {}, body)), UnreachableError)
 
 
 @pytest.mark.parametrize(("said", "seconds"), [("12", 12), (" 7 ", 7), ("soon", None), ("", None)])
@@ -313,10 +320,10 @@ def test_a_literal_or_pinned_address_is_its_own_one_route() -> None:
 
 
 def test_each_address_is_checked_with_its_pin_a_verifying_context_or_nothing() -> None:
-    pinned = _aio.tls_for(Address("https://stack.lan:8443", pin="ab" * 32))
+    pinned = transport.tls_for(Address("https://stack.lan:8443", pin="ab" * 32))
     assert isinstance(pinned, aiohttp.Fingerprint)
     assert pinned.fingerprint == bytes.fromhex("ab" * 32)
-    verifying = _aio.tls_for(Address("https://127.0.0.1:8443"))
+    verifying = transport.tls_for(Address("https://127.0.0.1:8443"))
     assert not isinstance(verifying, bool | aiohttp.Fingerprint)
     assert verifying.check_hostname
-    assert _aio.tls_for(Address("http://127.0.0.1:8080")) is True
+    assert transport.tls_for(Address("http://127.0.0.1:8080")) is True

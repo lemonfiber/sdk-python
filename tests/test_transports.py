@@ -23,7 +23,7 @@ from lemonfiber import (
     admit_async,
     collect_async,
 )
-from lemonfiber._aio import STRAIGHT
+from lemonfiber._aio.transport import STRAIGHT
 from lemonfiber._protocol.calls import DEFAULT_TIMEOUT
 from lemonfiber._sync import CHUNK
 from tests.conftest import PRINTED
