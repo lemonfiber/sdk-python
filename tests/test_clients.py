@@ -2,7 +2,7 @@
 """What both clients do, asserted of each: reads, actions, jobs, refusals and the token's placement."""
 
 import asyncio
-import datetime
+import datetime as dt
 import socket
 from typing import TYPE_CHECKING
 
@@ -233,14 +233,14 @@ SCOPED = {
 def test_what_a_stack_can_do_is_read_for_the_credential_that_asked(client: Driver, stack: Stack) -> None:
     answered = {"capabilities": SCOPED, "scope": "act", "stack": "stk_4f2a"}
     stack.reply("GET", "/api/capabilities", Reply(body=envelope("capabilities", answered)))
-    before = datetime.datetime.now(datetime.UTC)
+    before = dt.datetime.now(dt.UTC)
     said = client.capabilities()
     [arrived] = stack.arrived
     assert arrived.url == "/api/capabilities"
     assert arrived.headers[CREDENTIAL_HEADER] == PRINTED
     assert arrived.headers["Accept"] == "application/json"
     assert dict(said.states) == SCOPED
-    assert before <= said.read_at <= datetime.datetime.now(datetime.UTC)
+    assert before <= said.read_at <= dt.datetime.now(dt.UTC)
     assert said.available == {"/api/status", "/api/actions/restart", "/api/something-newer"}
     assert said.unconfigured == {"/api/actions/update"}
     assert said.unpermitted == {"/api/actions/uninstall"}
@@ -627,7 +627,7 @@ ADMITTED = envelope("admission", {"token": "session-secret", "until": "2026-10-0
 def test_a_password_is_exchanged_once_for_a_session(flavour: Flavour, stack: Stack) -> None:
     stack.reply("POST", "/api/session", Reply(body=ADMITTED))
     session = admitted(flavour, Address(stack.url), "hunter2")
-    assert session.until == datetime.datetime(2026, 10, 5, 12, tzinfo=datetime.UTC)
+    assert session.until == dt.datetime(2026, 10, 5, 12, tzinfo=dt.UTC)
     assert session.member is None
     [arrived] = stack.arrived
     assert arrived.body == b'{"password": "hunter2"}'
@@ -644,7 +644,7 @@ def test_a_member_names_themself_at_the_door(flavour: Flavour, stack: Stack) -> 
     stack.reply("POST", "/api/session", Reply(body=member))
     session = admitted(flavour, Address(stack.url), "pw", "ana")
     assert session.member == "ana"
-    assert session.until == datetime.datetime(2026, 10, 5, 12, 0, 0, 250000, tzinfo=datetime.UTC)
+    assert session.until == dt.datetime(2026, 10, 5, 12, 0, 0, 250000, tzinfo=dt.UTC)
     assert stack.arrived[0].body == b'{"name": "ana", "password": "pw"}'
 
 
@@ -692,7 +692,7 @@ def test_a_session_with_an_offset_of_nothing_is_utc(flavour: Flavour, stack: Sta
         "/api/session",
         Reply(body=envelope("admission", {"token": "s", "until": "2026-10-05T12:00:00+00:00"})),
     )
-    assert admitted(flavour, Address(stack.url), "pw").until.tzinfo is datetime.UTC
+    assert admitted(flavour, Address(stack.url), "pw").until.tzinfo is dt.UTC
 
 
 def test_a_door_slower_than_the_timeout_is_unreachable(stack: Stack) -> None:

@@ -2,7 +2,7 @@
 """Integration keys kept through their own doors, and a key minted as a claim collected with its link."""
 
 import asyncio
-import datetime
+import datetime as dt
 import json
 import types
 import urllib.parse
@@ -106,7 +106,7 @@ def test_a_key_link_is_read_as_a_claims_mint_writes_it() -> None:
     assert read.address.pin == read.pin
     assert read.pin.hex == A_PIN
     assert read.stack == "stack-1f6a"
-    assert read.lapses == datetime.datetime(2100, 1, 1, tzinfo=datetime.UTC)
+    assert read.lapses == dt.datetime(2100, 1, 1, tzinfo=dt.UTC)
     assert read.claim == CLAIM
     assert not read.lapsed()
 
