@@ -16,6 +16,11 @@ STACK: typing.Final[typing.Mapping[RefusalCode, ListedRefusal]] = {
     "STACK-10": ListedRefusal(
         "STACK_UNASSEMBLED", 500, "Raised when a manifest's files are not laid out as the contract says."
     ),
+    "STACK-11": ListedRefusal(
+        "PROJECT_EDITED",
+        409,
+        "Raised when a change would write over a generated project the operator has edited.",
+    ),
     "STACK-2": ListedRefusal(
         "STACK_UNUSABLE", 500, "Raised when a manifest is readable and this build cannot use it."
     ),
