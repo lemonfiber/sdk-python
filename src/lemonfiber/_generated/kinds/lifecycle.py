@@ -13,6 +13,7 @@ from ..shared.lifecycle__plugins__settings__update import Unvetted
 from ..shared.lifecycle__preview import Plan
 from ..shared.lifecycle__quality__reset__update import StackEdit
 from ..shared.lifecycle__status import Condition
+from ..shared.lifecycle__update import MoveOffered
 
 
 class LifecycleEnvelope(typing.TypedDict):
@@ -51,6 +52,10 @@ class LifecycleReport(typing.TypedDict):
     stopped on purpose, autostart was never asked for, or this machine is on its
     battery and nobody said to start anyway — and a run nobody is watching has to
     leave the reason somewhere a reader finds later.
+    """
+    moves: typing.NotRequired[list[MoveOffered]]
+    """Each part this release installs as a plugin that the stack still runs as its own
+    service: a move in place on offer, named by every start and taken by none.
     """
     offer: typing.NotRequired[str | None]
     """The offer a restart answers: the services it would restart, named so that a

@@ -9,6 +9,7 @@ import typing
 
 from ..shared.lifecycle__plugins__settings__update import Unvetted
 from ..shared.lifecycle__quality__reset__update import StackEdit
+from ..shared.lifecycle__update import MoveOffered
 from ..shared.update__version import Notes
 
 
@@ -58,6 +59,10 @@ class StackUpdateReport(typing.TypedDict):
     in_flight: list[str]
     """What the download clients are still working on, named so an operator can
     tell whether the thing they have been waiting for is among them.
+    """
+    moves: typing.NotRequired[list[MoveOffered]]
+    """Each part this release installs as a plugin that the stack still runs as its own
+    service: a move in place on offer, which an update never takes.
     """
     offer: str
     """The offer this answers: every step, from the release each service stands on to
