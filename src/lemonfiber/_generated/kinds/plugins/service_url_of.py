@@ -162,13 +162,8 @@ class PluginPlaced(typing.TypedDict):
     native: typing.NotRequired[str | None]
     """The API it answers the stack's other services in, where it names one."""
     networks: typing.NotRequired[list[str]]
-    """The stack's own networks it joins beside the default one, because a stack service
-    it stands in for is on them.
-
-    Settled at install from the stack it was installed beside and written down, so
-    the container lemonfiber writes for it stays a function of this record alone.
-    Defaulted for a record written before this was kept, which reads as joining none
-    and staying on the default network.
+    """Networks an older record named for it. Nothing reads them: each service's place on
+    the networks is derived with the project, and a record written now holds none.
     """
     provides: typing.NotRequired[list[str]]
     """Every core capability this one service fills, which is what makes it a candidate
