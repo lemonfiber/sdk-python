@@ -9,7 +9,7 @@ import typing
 
 from ..shared.dashboard__lifecycle__status import Service
 from ..shared.lifecycle__migration import ConflictReport
-from ..shared.lifecycle__plugins__settings__update import Unvetted
+from ..shared.lifecycle__plugins__settings__substitution__update import Unvetted
 from ..shared.lifecycle__preview import Plan
 from ..shared.lifecycle__quality__reset__update import StackEdit
 from ..shared.lifecycle__status import Condition

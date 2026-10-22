@@ -8,7 +8,7 @@ and CI fails on any difference.
 import typing
 
 from .service_url_of import PluginInstall, PluginInstalled, PluginProving
-from ...shared.lifecycle__plugins__settings__update import Unvetted
+from ...shared.lifecycle__plugins__settings__substitution__update import Unvetted
 from ...shared.plugins__undo import UndoReversal
 
 

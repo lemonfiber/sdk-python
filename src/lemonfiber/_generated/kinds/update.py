@@ -7,7 +7,7 @@ and CI fails on any difference.
 
 import typing
 
-from ..shared.lifecycle__plugins__settings__update import Unvetted
+from ..shared.lifecycle__plugins__settings__substitution__update import Unvetted
 from ..shared.lifecycle__quality__reset__update import StackEdit
 from ..shared.lifecycle__update import MoveOffered
 from ..shared.update__version import Notes
