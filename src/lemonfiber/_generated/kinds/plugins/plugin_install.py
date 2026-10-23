@@ -7,11 +7,10 @@ and CI fails on any difference.
 
 import typing
 
-from .api_kind import PluginChange, PluginEvidence, PluginOverriding
-from .service_url_of import (
+from .api_kind import PluginChange, PluginDemand, PluginEvidence, PluginOverriding, PluginRecipeRan
+from .plugin_failing_as_declared import (
     PluginInstalled,
     PluginProving,
-    PluginRecipeRan,
     PluginTaking,
     PluginVerification,
     WiringContest,
@@ -116,6 +115,13 @@ class PluginInstalls(typing.TypedDict):
 
     Named part by part, so an answer refused because something moved is told which
     part did.
+    """
+    demand: typing.NotRequired[PluginDemand | None]
+    """What asking for one of a plugin's demand recipes came to, or nothing where none
+    was asked for.
+
+    Boxed for the reason the install is: it carries a whole recipe, and every other
+    run's report would otherwise be as large as the one run that asks for one.
     """
     install: typing.NotRequired[PluginInstall | None]
     """What this run's install came to, or nothing where it only read.
