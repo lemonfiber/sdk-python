@@ -14,13 +14,11 @@ from .api_kind import (
     Expect,
     PluginAdapterOwner,
     PluginAsking,
-    PluginChange,
     PluginChangedCheck,
     PluginDeclaration,
-    PluginEvidence,
     PluginFailingAsDeclared,
-    PluginOverriding,
     PluginReached,
+    PluginRequest,
     PluginShape,
     ServiceConstant,
     ServiceMount,
@@ -32,89 +30,6 @@ from .api_kind import (
     ServiceUserMode,
 )
 from ...shared.doctor__error__plugins import StepCame
-from ...shared.plugins__undo import UndoReversal
-from ...shared.plugins__wiring import Wired
-
-
-class PluginInstall(typing.TypedDict):
-    """What an install came to, and what it took to get there.
-
-    **The three lists below are stated whether the run wrote anything or not, and that
-    is the whole of what makes a rehearsal worth running.** A rehearsal that reported
-    less than the real run would be a preview of a different operation; one that
-    reported it from code of its own would be a second derivation free to disagree
-    with the one that acts. So they are filled in one place, from the manifest and from
-    the very list of writes the install is carried out from, and the surface says them
-    in whichever tense `recorded` calls for.
-    """
-
-    against: typing.NotRequired[PluginEvidence | None]
-    """What those verdicts were reached against, or nothing where none were reached.
-
-    Carried rather than assumed, because the two kinds of evidence are not the
-    same claim: an author's read asks the recordings a plugin ships, and an
-    install asks the service running on this machine. The weaker must not be
-    readable as the stronger, and a reader handed a verdict has nothing else in
-    the document to tell them apart.
-    """
-    asks: list[Wired]
-    """Every ask its services would make, each with what it would reach and how that
-    would be settled.
-    """
-    changes: list[PluginChange]
-    """Every change it makes to the machine, in the order it makes them."""
-    contests: list[WiringContest]
-    """Every ask of the stack's the install leaves contested that is not contested
-    now, as it would then stand.
-
-    A plugin's service that claims what the stack asks for is a candidate like any
-    other, so installing it leaves the ask refused until somebody chooses — which is
-    a change to what the stack does, and stated with the rest before it happens.
-    """
-    overrides: list[PluginOverriding]
-    """Every bundled thing the plugin declares it will change.
-
-    The full extent rather than a sample of it: a manifest may change a bundled
-    setting only through a recipe, and a recipe reaching one no `[[override]]`
-    names is refused before anything is written.
-    """
-    proofs: list[PluginProving]
-    """Every proof that has to hold before the plugin is installed, and on a run
-    that asked them, what each came to.
-    """
-    recipes_ran: list[PluginRecipeRan]
-    """Every install recipe the act ran, in order, with what each step came to; an
-    empty list where none ran, which is every rehearsal and every plugin declaring no
-    install recipe.
-
-    A recipe that did not hold ends the act with a problem carrying the same account,
-    so this is the account of recipes that held.
-    """
-    recorded: bool
-    """Whether it was written down. A rehearsal leaves this false."""
-    reversed: typing.NotRequired[UndoReversal | None]
-    """What putting the install back came to, where something failed and it was.
-
-    The rollback layer's own report rather than a shape of this verb's: what went
-    back, and what did not with the reason each is still standing. Absent on a run
-    that had nothing to put back, which is both a rehearsal and an install that
-    held.
-    """
-    taking: list[PluginTaking]
-    """Every service taking a privileged shape, with what it is given, each approved
-    apart from the offer.
-    """
-    verified: typing.NotRequired[PluginVerification | None]
-    """What the stack's own checks made of the install, or nothing on a run that
-    asked them nothing.
-
-    The other half of what an install has to establish, and the half a plugin
-    cannot establish for itself: its proofs say the plugin works, and this says the
-    stack still does. Absent on a rehearsal, which writes nothing and so has
-    nothing to hold a reading against.
-    """
-    would: PluginInstalled
-    """What the install settled, said whether or not it was written down."""
 
 
 class PluginPlaced(typing.TypedDict):
@@ -255,6 +170,25 @@ class PluginRecipeRan(typing.TypedDict):
     """Every step it declares, in order, with what each came to."""
     why: typing.NotRequired[str | None]
     """Why it did not, where it did not."""
+
+
+class PluginRequestProof(typing.TypedDict):
+    """One proof that asks one of the plugin's services a question, kept so the doctor can ask
+    it again without the plugin's source.
+    """
+
+    expect: Expect
+    """What the answer must be."""
+    proof: str
+    """The proof's id."""
+    request: PluginRequest
+    """What it asks."""
+    service: str
+    """The service it asks."""
+    title: str
+    """What it establishes, in one line."""
+    why: str
+    """Why it is worth asserting."""
 
 
 class PluginRun(typing.TypedDict):
@@ -494,6 +428,7 @@ PluginInstalled = typing.TypedDict(
         "plugin": str,
         "provides": typing.NotRequired[list[str]],
         "recipes": typing.NotRequired[list[PluginRecipe]],
+        "request_proofs": typing.NotRequired[list[PluginRequestProof]],
         "revision": typing.NotRequired[str],
         "run_proofs": typing.NotRequired[list[PluginRunProof]],
         "services": list[PluginPlaced],
@@ -520,13 +455,13 @@ PluginPair = typing.TypedDict(
 
 
 __all__ = [
-    "PluginInstall",
     "PluginInstalled",
     "PluginPair",
     "PluginPlaced",
     "PluginProving",
     "PluginRecipe",
     "PluginRecipeRan",
+    "PluginRequestProof",
     "PluginRun",
     "PluginRunProof",
     "PluginServiceAdapter",

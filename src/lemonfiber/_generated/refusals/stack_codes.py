@@ -21,6 +21,9 @@ STACK: typing.Final[typing.Mapping[RefusalCode, ListedRefusal]] = {
         409,
         "Raised when a change would write over a generated project the operator has edited.",
     ),
+    "STACK-13": ListedRefusal(
+        "RESET_MOVED", 400, "Raised where the offer a reset answers is not the one a reading of it makes now."
+    ),
     "STACK-2": ListedRefusal(
         "STACK_UNUSABLE", 500, "Raised when a manifest is readable and this build cannot use it."
     ),
