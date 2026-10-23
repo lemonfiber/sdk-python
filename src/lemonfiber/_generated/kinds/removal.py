@@ -35,6 +35,7 @@ HouseholdRemoval = typing.TypedDict(
         "confirmed": bool,
         "findings": list[str],
         "name": str,
+        "offer": str,
         "rehearsed": bool,
         "requests": int,
         "revoked": Revoked,

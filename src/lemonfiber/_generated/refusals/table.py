@@ -24,6 +24,7 @@ from .quota_codes import QUOTA
 from .rate_codes import RATE
 from .read_codes import READ
 from .rehearse_codes import REHEARSE
+from .remove_codes import REMOVE
 from .repair_codes import REPAIR
 from .restore_codes import RESTORE
 from .serve_codes import SERVE
@@ -54,6 +55,7 @@ REFUSAL_CODES: typing.Final[typing.Mapping[RefusalCode, ListedRefusal]] = types.
         **RATE,
         **READ,
         **REHEARSE,
+        **REMOVE,
         **REPAIR,
         **RESTORE,
         **SERVE,
