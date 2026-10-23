@@ -137,8 +137,8 @@ class PluginPlaced(typing.TypedDict):
     write the day that fallback moved.
     """
     description: typing.NotRequired[str]
-    """What the plugin says it does for the operator, which is what its dashboard entry
-    says beside it.
+    """The line its dashboard entry shows beside it: the one its wiring names, or what
+    the plugin says it does for the operator.
     """
     digest: str
     """The digest that fixes what runs."""
@@ -146,6 +146,12 @@ class PluginPlaced(typing.TypedDict):
     """Its container fields beyond those above."""
     fronts: typing.NotRequired[str | None]
     """The service of the same plugin it stands in front of, as an adapter."""
+    health: typing.NotRequired[str | None]
+    """The path it answers over HTTP to say it is up, where its health is asked that way."""
+    hidden: typing.NotRequired[bool]
+    """Whether its wiring hid it from the dashboard."""
+    icon: typing.NotRequired[str | None]
+    """The icon its dashboard entry shows, where its wiring names one."""
     image: str
     """The registry path, carrying no pin of its own."""
     listens: typing.NotRequired[int | None]
