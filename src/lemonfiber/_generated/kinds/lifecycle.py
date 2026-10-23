@@ -62,6 +62,10 @@ class LifecycleReport(typing.TypedDict):
     restart carrying it back is carried out against those services or refused.
     Absent for every other action.
     """
+    passing: typing.NotRequired[str | None]
+    """Why the pass service is left out of the project a start writes, where the stream
+    guard is filled and it is. Absent for every other action.
+    """
     plan: Plan
     """What the named forms came to: the profiles, the services they hold, and
     what the configuration left out.
