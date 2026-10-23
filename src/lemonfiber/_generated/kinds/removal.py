@@ -38,6 +38,7 @@ HouseholdRemoval = typing.TypedDict(
         "rehearsed": bool,
         "requests": int,
         "revoked": Revoked,
+        "watch-history": str,
     },
 )
 """What removing somebody costs, and what it did.
