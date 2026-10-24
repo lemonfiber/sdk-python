@@ -20,6 +20,7 @@ from .api_kind import (
     PluginRecipe,
     PluginRequest,
 )
+from ...shared.plugins__undo import PluginGrant
 
 
 class PluginFailingAsDeclared(typing.TypedDict):
@@ -446,6 +447,7 @@ PluginInstalled = typing.TypedDict(
         "declared": typing.NotRequired[PluginDeclaration],
         "description": typing.NotRequired[str | None],
         "from": typing.NotRequired[str],
+        "granted": typing.NotRequired[list[PluginGrant]],
         "installed_at": typing.NotRequired[str],
         "manifest": typing.NotRequired[str],
         "name": typing.NotRequired[str | None],

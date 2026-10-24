@@ -411,19 +411,6 @@ class PluginRequest(typing.TypedDict):
     """The path on the service being asked."""
 
 
-class PluginSecret(typing.TypedDict):
-    """One credential a plugin says it will hold, without a value and with no place for one."""
-
-    id: str
-    """What the value is, within the plugin."""
-    minted: typing.NotRequired[bool]
-    """Whether lemonfiber made the value at install."""
-    of: str
-    """Whose credential it is."""
-    why: str
-    """What holding it is for."""
-
-
 class PluginStep(typing.TypedDict):
     """One call a recipe makes, in the order it makes them."""
 
@@ -514,6 +501,19 @@ PluginPair = typing.TypedDict(
     },
 )
 """One value a recipe could carry to one destination, as the operator agrees to it."""
+
+
+PluginSecret = typing.TypedDict(
+    "PluginSecret",
+    {
+        "for": typing.NotRequired[str | None],
+        "id": str,
+        "minted": typing.NotRequired[bool],
+        "of": str,
+        "why": str,
+    },
+)
+"""One credential a plugin says it will hold, without a value and with no place for one."""
 
 
 __all__ = [
