@@ -152,6 +152,8 @@ class PluginAsking(typing.TypedDict):
     """The core capability asked for."""
     each: typing.NotRequired[bool]
     """Whether every service that fills it is reached rather than one."""
+    native: typing.NotRequired[str | None]
+    """The upstream's own API it talks in, which it reaches in place of the adapter."""
 
 
 class PluginChange(typing.TypedDict):
@@ -268,20 +270,6 @@ class PluginDemand(typing.TypedDict):
     """The recipe as the operator agrees to it: its calls, what it asks for, and every
     value it would carry where.
     """
-
-
-type PluginEvidence = typing.Literal["recordings", "service"]
-"""What the verdicts in a report were reached against.
-
-One value, because one is all this build can produce: nothing here asks a service
-anything. It is a field rather than a sentence for the reason a verdict is one — a
-reader handed `demonstrated` has nothing else in the document to tell a recording
-that answered from a service that did, and the weaker of those two claims must not
-be readable as the stronger. The prose says it on the page; this says it to
-whatever consumes the report: an author's own CI, a catalogue, anything counting
-passes. Naming the axis now is what made the second kind of evidence a change the
-compiler walked somebody through rather than one they had to remember.
-"""
 
 
 class PluginExpectedFailure(typing.TypedDict):
@@ -532,7 +520,6 @@ __all__ = [
     "PluginDeclaration",
     "PluginDeclaredVerdict",
     "PluginDemand",
-    "PluginEvidence",
     "PluginExpectedFailure",
     "PluginOverriding",
     "PluginPair",
