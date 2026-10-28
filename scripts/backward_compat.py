@@ -210,26 +210,33 @@ def changed_values(
 ) -> Iterator[tuple[griffe.Attribute, griffe.Attribute]]:
     """Yield each public attribute of `old` that `new` holds under its name, written another way.
 
-    Modules and classes are walked as griffe walks them for the other breaks: a
-    name that is not public is passed over, an alias is followed to its target,
-    and one whose target cannot be found is passed over.
+    Modules and classes are walked as griffe walks them for the other breaks.
     """
-    for name, was in old.all_members.items():
-        if not was.is_public or name not in new.all_members:
-            continue
-        try:
-            before = target(was)
-            after = target(new.all_members[name])
-        except griffe.AliasResolutionError, griffe.CyclicAliasError:
-            continue
-        if before.path in seen:
-            continue
-        seen.add(before.path)
+    for before, after in walked(old, new, seen):
         if isinstance(before, griffe.Attribute) and isinstance(after, griffe.Attribute):
             if str(before.value) != str(after.value):
                 yield before, after
         elif before.kind is after.kind and (before.is_module or before.is_class):
             yield from changed_values(before, after, seen)
+
+
+def walked(old: Loaded, new: Loaded, seen: set[str]) -> Iterator[tuple[Loaded, Loaded]]:
+    """Yield each public member of `old` and what `new` holds under its name, each once.
+
+    A name that is not public is passed over, an alias is followed to its target,
+    and one whose target cannot be found is passed over.
+    """
+    for name, was in old.all_members.items():
+        now = new.all_members.get(name)
+        if not was.is_public or now is None:
+            continue
+        try:
+            before, after = target(was), target(now)
+        except griffe.AliasResolutionError, griffe.CyclicAliasError:
+            continue
+        if before.path not in seen:
+            seen.add(before.path)
+            yield before, after
 
 
 def target(member: Loaded) -> Loaded:
