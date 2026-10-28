@@ -33,6 +33,7 @@ type RefusalCode = typing.Literal[
     "ASK-8",
     "ASK-9",
     "BUNDLE-8",
+    "CRED-4",
     "DEVICE-1",
     "DEVICE-10",
     "DEVICE-11",

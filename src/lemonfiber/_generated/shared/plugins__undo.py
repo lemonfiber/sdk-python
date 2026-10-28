@@ -26,6 +26,7 @@ type Action = (
     | ActionResettle
     | ActionRegrant
     | ActionRehold
+    | ActionUnreplaced
     | ActionLeave
 )
 """What an undo does.
@@ -233,6 +234,18 @@ class ActionRewind(typing.TypedDict):
     """
 
 
+class ActionUnreplaced(typing.TypedDict):
+    """Leave the media server's internal certificate as it is.
+
+    Worked out so the record of a replacement has a reversal to name, and never carried
+    out: the certificate is put back only by replacing it again.
+    """
+
+    does: typing.Literal["unreplaced"]
+    service: str
+    """The media server's service."""
+
+
 class ActionWithdraw(typing.TypedDict):
     """Take a region lemonfiber wrote back out of the file it was written into.
 
@@ -389,6 +402,7 @@ __all__ = [
     "ActionRevoke",
     "ActionRevokeDevice",
     "ActionRewind",
+    "ActionUnreplaced",
     "ActionWithdraw",
     "PluginGrant",
     "Undo",
