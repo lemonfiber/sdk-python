@@ -108,7 +108,17 @@ minimum-score = 100
 # that symbol and that kind alone, where a commit since the consumer's pin is
 # marked breaking; every other break fails.
 accepted = [
-  { symbol = "lemonfiber._generated.kinds.plugins.api_kind.PluginSecret", kind = "object-changed-kind", reason = "The contract gives PluginSecret a `for` field, a Python keyword no class body can declare, so it is written as a functional TypedDict. It is the same TypedDict to a type checker, holding every key it held, with `for` optional." },
+  { symbol = "lemonfiber.contract.Api", kind = "object-removed", reason = "A service names no adapter of lemonfiber's and is reached over the contracts it speaks, so the contract describes no Api." },
+  { symbol = "lemonfiber.contract.KeySource", kind = "object-removed", reason = "Only Api named where a credential comes from, and the contract describes no Api." },
+  { symbol = "lemonfiber.contract.PluginServiceAdapter", kind = "object-removed", reason = "A service names no adapter of lemonfiber's and is reached over the contracts it speaks, so a plugin's service names none of lemonfiber's adapters." },
+  { symbol = "lemonfiber._generated.kinds.plugins.plugin_evidence.PluginPlaced.api", kind = "object-removed", reason = "A service names no adapter of lemonfiber's and is reached over the contracts it speaks, so a placed service records no adapter." },
+  { symbol = "lemonfiber._generated.kinds.seed.SeedReport.unsupported", kind = "object-removed", reason = "A service names no adapter of lemonfiber's and is reached over the contracts it speaks, so no service is one a seeding pass cannot speak to." },
+  { symbol = "lemonfiber._generated.kinds.status.StatusReport.unsupported", kind = "object-removed", reason = "A service names no adapter of lemonfiber's and is reached over the contracts it speaks, so no running service is one the status cannot say what it is." },
+  { symbol = "lemonfiber._generated.kinds.stuck.StuckReport.unsupported", kind = "object-removed", reason = "A service names no adapter of lemonfiber's and is reached over the contracts it speaks, so no service has a queue that is never asked." },
+  { symbol = "lemonfiber._generated.kinds.settings.SettingChange.setting", kind = "object-removed", reason = "A change moves one or more settings in one act, so each moved setting is a SettingMove in `settings`, which holds its name as `setting`." },
+  { symbol = "lemonfiber._generated.kinds.settings.SettingChange.was", kind = "object-removed", reason = "A change moves one or more settings in one act, so each moved setting is a SettingMove in `settings`, which holds what it held as `was`." },
+  { symbol = "lemonfiber._generated.kinds.settings.SettingChange.value", kind = "object-removed", reason = "A change moves one or more settings in one act, so each moved setting is a SettingMove in `settings`, which holds what it is to hold as `value`." },
+  { symbol = "lemonfiber._generated.kinds.settings.SettingChange.consequence", kind = "object-removed", reason = "A change moves one or more settings in one act, so each moved setting is a SettingMove in `settings`, which holds what moving it costs as `consequence`." },
 ]
 
 [tool.lemonfiber.line-cap]
