@@ -320,31 +320,7 @@ def test_the_commits_cannot_be_read_without_git(
         backward_compat.marked_breaking(tmp_path, REVISION)
 
 
-class Removed:
-    """What a removed object's break is to."""
-
-    path = "lemonfiber.Gone"
-
-
-class Breakage:
-    """A breaking change griffe found, explained in these words."""
-
-    kind = griffe.BreakageKind.OBJECT_REMOVED
-    obj = Removed()
-    old_value = None
-    new_value = None
-
-    def __init__(self, said: str) -> None:
-        """Hold the explanation."""
-        super().__init__()
-        self.said = said
-
-    def explain(self) -> str:
-        """Return the explanation."""
-        return self.said
-
-
-def test_a_breakage_is_what_griffe_finds_between_the_pin_and_the_tree(
+def test_a_breakage_is_what_the_pin_and_the_tree_compare_to(
     tmp_path: pathlib.Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -358,12 +334,12 @@ def test_a_breakage_is_what_griffe_finds_between_the_pin_and_the_tree(
         loaded.append((package, given))
         return "in the tree"
 
-    def find_breaking_changes(old: str, new: str) -> list[Breakage]:
-        return [Breakage(f"{old} to {new}")]
+    def compared(old: str, new: str) -> list[backward_compat.Break]:
+        return [backward_compat.Break("lemonfiber.Gone", "object-removed", f"{old} to {new}")]
 
     monkeypatch.setattr(backward_compat.griffe, "load_git", load_git)
     monkeypatch.setattr(backward_compat.griffe, "load", load)
-    monkeypatch.setattr(backward_compat.griffe, "find_breaking_changes", find_breaking_changes)
+    monkeypatch.setattr(backward_compat, "compared", compared)
     assert backward_compat.breakages(REVISION, tmp_path) == [
         backward_compat.Break("lemonfiber.Gone", "object-removed", "at the pin to in the tree"),
     ]
@@ -384,13 +360,16 @@ def surface(root: pathlib.Path, modules: dict[str, str]) -> griffe.Object | grif
 
 def changes(tmp_path: pathlib.Path, before: dict[str, str], after: dict[str, str]) -> list[str]:
     """Return the breakages the check keeps between two versions of a package."""
-    old = surface(tmp_path / "old", before)
-    new = surface(tmp_path / "new", after)
-    return [
-        breakage.explain()
-        for breakage in griffe.find_breaking_changes(old, new)
-        if not backward_compat.same_value(breakage, old, new)
-    ]
+    return [one.explained for one in breaks(tmp_path, before, after)]
+
+
+def breaks(
+    tmp_path: pathlib.Path,
+    before: dict[str, str],
+    after: dict[str, str],
+) -> list[backward_compat.Break]:
+    """Return the breaks the check keeps between two versions of a package."""
+    return backward_compat.compared(surface(tmp_path / "old", before), surface(tmp_path / "new", after))
 
 
 def test_a_default_moved_to_another_module_with_its_value_is_no_breakage(tmp_path: pathlib.Path) -> None:
@@ -422,6 +401,61 @@ def test_a_number_become_the_enum_member_equal_to_it_is_no_breakage(tmp_path: pa
 def test_a_value_that_is_not_the_one_it_was_is_a_breakage(tmp_path: pathlib.Path, was: str, now: str) -> None:
     [found] = changes(tmp_path, {"__init__": f"VALUE = {was}\n"}, {"__init__": f"VALUE = {now}\n"})
     assert "VALUE" in found
+
+
+def test_a_changed_value_is_named_and_explained_as_griffe_explains_a_break(tmp_path: pathlib.Path) -> None:
+    assert breaks(tmp_path, {"__init__": "VALUE = 30.0\n"}, {"__init__": "\nVALUE = 31.0\n"}) == [
+        backward_compat.Break(
+            "surface.VALUE",
+            "attribute-changed-value",
+            "surface/__init__.py:2: surface.VALUE: Attribute value was changed: 30.0 -> 31.0",
+        ),
+    ]
+
+
+def test_a_value_written_as_it_was_is_no_breakage_though_it_cannot_be_evaluated(
+    tmp_path: pathlib.Path,
+) -> None:
+    unchanged = {"__init__": "def compute() -> int: ...\n\nVALUE = compute()\n"}
+    assert changes(tmp_path, unchanged, unchanged) == []
+
+
+def test_a_value_given_to_a_name_that_had_none_is_a_breakage(tmp_path: pathlib.Path) -> None:
+    [found] = breaks(tmp_path, {"__init__": "VALUE: int\n"}, {"__init__": "VALUE: int = 1\n"})
+    assert found.explained.endswith("Attribute value was changed: None -> 1")
+
+
+def test_a_value_of_a_class_or_a_public_module_is_compared_too(tmp_path: pathlib.Path) -> None:
+    before = {"__init__": "class Limits:\n    MOST = 3\n", "wire": "TIMEOUT = 30.0\n"}
+    after = {"__init__": "class Limits:\n    MOST = 4\n", "wire": "TIMEOUT = 31.0\n"}
+    assert sorted(one.symbol for one in breaks(tmp_path, before, after)) == [
+        "surface.Limits.MOST",
+        "surface.wire.TIMEOUT",
+    ]
+
+
+def test_a_value_reached_twice_is_one_break_of_where_it_is(tmp_path: pathlib.Path) -> None:
+    exported = '__all__ = ["TIMEOUT"]\n\nfrom surface.wire import TIMEOUT\n'
+    before = {"__init__": exported, "wire": "TIMEOUT = 30.0\n"}
+    after = {"__init__": exported, "wire": "TIMEOUT = 31.0\n"}
+    assert [one.symbol for one in breaks(tmp_path, before, after)] == ["surface.wire.TIMEOUT"]
+
+
+def test_a_value_that_is_not_public_or_not_there_any_more_is_not_compared(tmp_path: pathlib.Path) -> None:
+    before = {"__init__": "_HIDDEN = 1\nGONE = 1\n"}
+    after = {"__init__": "_HIDDEN = 2\n"}
+    assert [one.kind for one in breaks(tmp_path, before, after)] == ["object-removed"]
+
+
+def test_a_name_whose_target_cannot_be_found_is_passed_over(tmp_path: pathlib.Path) -> None:
+    missing = '__all__ = ["THING"]\n\nfrom nowhere_at_all import THING\n'
+    assert breaks(tmp_path, {"__init__": missing}, {"__init__": missing}) == []
+
+
+def test_a_class_become_a_module_is_a_changed_kind_and_no_changed_value(tmp_path: pathlib.Path) -> None:
+    before = {"__init__": "class Limits:\n    MOST = 3\n"}
+    after = {"__init__": "", "Limits": "MOST = 4\n"}
+    assert [one.kind for one in breaks(tmp_path, before, after)] == ["object-changed-kind"]
 
 
 def test_a_default_that_is_not_the_one_it_was_is_a_breakage(tmp_path: pathlib.Path) -> None:

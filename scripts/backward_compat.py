@@ -7,10 +7,11 @@ tree under `_vendor/lemonfiber/` and records the commit beside the copy, in
 `30-repos/repos.toml`: every Python repository with an edge to `sdk-python`.
 
 Each recorded commit is loaded from this repository's history and compared with
-the working tree by griffe. A removed name, a changed signature or a narrowed
-type is a breakage and fails the check, naming the consumer it would break. A
-default or a value written another way, a constant moved to another module or
-a number become the enum member equal to it, is the same value and no
+the working tree by griffe, and every public value by this check, as griffe
+compares none. A removed name, a changed signature, a narrowed type or a
+changed value is a breakage and fails the check, naming the consumer it would
+break. A default or a value written another way, a constant moved to another
+module or a number become the enum member equal to it, is the same value and no
 breakage. A consumer that records no commit yet is said so and compared with
 nothing.
 
@@ -54,6 +55,8 @@ RECORD = "_vendor/lemonfiber/REVISION"
 """Where a consumer records the commit it vendored, relative to wherever it vendors."""
 COMMIT = re.compile(r"^[0-9a-f]{40}$")
 TIMEOUT_SECONDS = 30
+VALUE_CHANGED = "attribute-changed-value"
+"""The kind of break a public value that is no longer the one it was is accepted as."""
 
 BREAKING = re.compile(r"\A\w+(\([^)\n]*\))?!:|^BREAKING[ -]CHANGE:", re.MULTILINE)
 """A commit message git-cliff files under breaking changes: `!` after its type, or a breaking-change footer."""
@@ -165,11 +168,22 @@ def breakages(against: str, repo: pathlib.Path) -> list[Break]:
     """Return every way the working tree breaks what the commit `against` offered."""
     old = griffe.load_git(PACKAGE, ref=against, repo=repo, search_paths=["src"])
     new = griffe.load(PACKAGE, search_paths=[str(repo / "src")])
-    return [
+    return compared(old, new)
+
+
+def compared(old: Loaded, new: Loaded) -> list[Break]:
+    """Return every way `new` breaks what `old` offered, keeping a default or value that is the value it was."""
+    found = [
         break_of(breakage)
         for breakage in griffe.find_breaking_changes(old, new)
-        if not same_value(breakage, old, new)
+        if not same_default(breakage, old, new)
     ]
+    found.extend(
+        value_break(before, after)
+        for before, after in changed_values(old, new, set())
+        if not same(before.value, old, after.value, new)
+    )
+    return found
 
 
 def break_of(breakage: griffe.Breakage) -> Break:
@@ -182,17 +196,65 @@ def break_of(breakage: griffe.Breakage) -> Break:
     return Break(symbol, breakage.kind.name.lower().replace("_", "-"), breakage.explain())
 
 
-def same_value(breakage: griffe.Breakage, old: Loaded, new: Loaded) -> bool:
-    """Tell whether a changed default or value is the value it was, written another way."""
-    match breakage.kind:
-        case griffe.BreakageKind.PARAMETER_CHANGED_DEFAULT:
-            before = cast("griffe.Parameter", breakage.old_value).default
-            after = cast("griffe.Parameter", breakage.new_value).default
-        case griffe.BreakageKind.ATTRIBUTE_CHANGED_VALUE:
-            before = cast("str | griffe.Expr", breakage.old_value)
-            after = cast("str | griffe.Expr", breakage.new_value)
-        case _:
-            return False
+def value_break(before: griffe.Attribute, after: griffe.Attribute) -> Break:
+    """Return a public value that is no longer the one it was as a break, in the words griffe gives the others."""
+    where = f"{after.relative_package_filepath}:{after.lineno}"
+    said = f"{where}: {after.path}: Attribute value was changed: {before.value} -> {after.value}"
+    return Break(after.path, VALUE_CHANGED, said)
+
+
+def changed_values(
+    old: Loaded,
+    new: Loaded,
+    seen: set[str],
+) -> Iterator[tuple[griffe.Attribute, griffe.Attribute]]:
+    """Yield each public attribute of `old` that `new` holds under its name, written another way.
+
+    Modules and classes are walked as griffe walks them for the other breaks.
+    """
+    for before, after in walked(old, new, seen):
+        if isinstance(before, griffe.Attribute) and isinstance(after, griffe.Attribute):
+            if str(before.value) != str(after.value):
+                yield before, after
+        elif before.kind is after.kind and (before.is_module or before.is_class):
+            yield from changed_values(before, after, seen)
+
+
+def walked(old: Loaded, new: Loaded, seen: set[str]) -> Iterator[tuple[Loaded, Loaded]]:
+    """Yield each public member of `old` and what `new` holds under its name, each once.
+
+    A name that is not public is passed over, an alias is followed to its target,
+    and one whose target cannot be found is passed over.
+    """
+    for name, was in old.all_members.items():
+        now = new.all_members.get(name)
+        if not was.is_public or now is None:
+            continue
+        try:
+            before, after = target(was), target(now)
+        except griffe.AliasResolutionError, griffe.CyclicAliasError:
+            continue
+        if before.path not in seen:
+            seen.add(before.path)
+            yield before, after
+
+
+def target(member: Loaded) -> Loaded:
+    """Return what a member is: itself, or what an alias of it finally points to."""
+    return cast("Loaded", member.final_target) if isinstance(member, griffe.Alias) else member
+
+
+def same_default(breakage: griffe.Breakage, old: Loaded, new: Loaded) -> bool:
+    """Tell whether a changed default is the default it was, written another way."""
+    if breakage.kind is not griffe.BreakageKind.PARAMETER_CHANGED_DEFAULT:
+        return False
+    before = cast("griffe.Parameter", breakage.old_value).default
+    after = cast("griffe.Parameter", breakage.new_value).default
+    return same(before, old, after, new)
+
+
+def same(before: str | griffe.Expr | None, old: Loaded, after: str | griffe.Expr | None, new: Loaded) -> bool:
+    """Tell whether a value written in `old` and one written in `new` are the same value."""
     try:
         was = value_of(before, old)
         now = value_of(after, new)
