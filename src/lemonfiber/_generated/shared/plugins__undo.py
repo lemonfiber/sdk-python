@@ -27,6 +27,7 @@ type Action = (
     | ActionRegrant
     | ActionRehold
     | ActionUnreplaced
+    | ActionUnmoved
     | ActionRun
     | ActionLeave
 )
@@ -245,6 +246,18 @@ class ActionRun(typing.TypedDict):
     """The service."""
 
 
+class ActionUnmoved(typing.TypedDict):
+    """Leave one of lemonfiber's own guards on its plugin.
+
+    Worked out so the record of the move has a reversal to name, and never carried out:
+    the release that moved the guard moves it for good.
+    """
+
+    does: typing.Literal["unmoved"]
+    service: str
+    """The stack's own service the guard's plugin took the place of."""
+
+
 class ActionUnreplaced(typing.TypedDict):
     """Leave the media server's internal certificate as it is.
 
@@ -414,6 +427,7 @@ __all__ = [
     "ActionRevokeDevice",
     "ActionRewind",
     "ActionRun",
+    "ActionUnmoved",
     "ActionUnreplaced",
     "ActionWithdraw",
     "PluginGrant",

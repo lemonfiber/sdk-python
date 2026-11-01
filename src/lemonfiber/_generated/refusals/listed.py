@@ -183,6 +183,7 @@ type RefusalCode = typing.Literal[
     "STACK-8",
     "STACK-9",
     "STORAGE-9",
+    "UNDO-5",
     "UPDATE-5",
     "WIRE-1",
     "WIRE-2",

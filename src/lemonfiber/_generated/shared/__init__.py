@@ -36,6 +36,9 @@ from . import import___migration as _import___migration
 from . import key_claim__keys__minted_key as _key_claim__keys__minted_key
 from . import lifecycle__migration as _lifecycle__migration
 from . import (
+    lifecycle__plugins__reset__settings__substitution__update as _lifecycle__plugins__reset__settings__substitution__update,
+)
+from . import (
     lifecycle__plugins__settings__substitution__update as _lifecycle__plugins__settings__substitution__update,
 )
 from . import lifecycle__preview as _lifecycle__preview
@@ -82,6 +85,7 @@ from .held__part_way__title import *
 from .import___migration import *
 from .key_claim__keys__minted_key import *
 from .lifecycle__migration import *
+from .lifecycle__plugins__reset__settings__substitution__update import *
 from .lifecycle__plugins__settings__substitution__update import *
 from .lifecycle__preview import *
 from .lifecycle__preview__status import *
@@ -128,6 +132,7 @@ __all__ += _held__part_way__title.__all__
 __all__ += _import___migration.__all__
 __all__ += _key_claim__keys__minted_key.__all__
 __all__ += _lifecycle__migration.__all__
+__all__ += _lifecycle__plugins__reset__settings__substitution__update.__all__
 __all__ += _lifecycle__plugins__settings__substitution__update.__all__
 __all__ += _lifecycle__preview.__all__
 __all__ += _lifecycle__preview__status.__all__

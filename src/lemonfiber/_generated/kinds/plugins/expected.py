@@ -11,27 +11,6 @@ from ...shared.doctor__error__plugins import StepCame
 from ...shared.doctor__plugins import DoctorVerdict, Finding
 
 
-type ApiKind = typing.Literal[
-    "servarr",
-    "sabnzbd",
-    "qbittorrent",
-    "seerr",
-    "bindery",
-    "jellyfin",
-    "bazarr",
-    "audiobookshelf",
-    "nzbhydra2",
-]
-"""The API shapes lemonfiber knows how to speak.
-
-Four services share the `servarr` shape, which is what makes one client
-enough for them. Bindery is its own kind deliberately: it is not a Servarr
-application and Prowlarr's app sync does not reach it. Bazarr is its own for
-the neighbouring reason: it is told about the \\*arrs rather than being one of
-them, in a form body a client of the shared shape could not send.
-"""
-
-
 class Expect(typing.TypedDict):
     """What the answer has to be.
 
@@ -104,15 +83,6 @@ and whoever generates from it flattens every definition into one scope. `Kind` i
 the one name there a generator is certain to want for itself: every envelope this
 contract describes is keyed by its `kind`, so the union of them is a `Kind` too, and
 two of them in one module is a definition nothing can be compiled against.
-"""
-
-
-type PluginAdapterOwner = typing.Literal["lemonfiber"]
-"""Whose an adapter is.
-
-One answer, and the field exists so that the answer is on the wire: an adapter a
-plugin could bring would be code a stranger wrote running with lemonfiber's
-authority, which nothing here can load.
 """
 
 
@@ -318,6 +288,28 @@ type PluginPuts = typing.Literal["directory", "document", "key", "secrets", "sta
 """What an install puts at one path."""
 
 
+class PluginReachedHousehold(typing.TypedDict):
+    """From the household, through the stack's own proxy, at this label."""
+
+    group: typing.NotRequired[str | None]
+    """The group on the bundled dashboard, where the manifest named one."""
+    hostname: str
+    """The single label in front of the operator's domain."""
+    port: int
+    """The port the service listens on."""
+    tier: typing.Literal["household"]
+
+
+class PluginReachedLoopback(typing.TypedDict):
+    """From this machine and nowhere else. No route, and no label to route to."""
+
+    group: typing.NotRequired[str | None]
+    """The group on the bundled dashboard, where the manifest named one."""
+    port: int
+    """The port the service listens on."""
+    tier: typing.Literal["loopback"]
+
+
 class PluginRecipe(typing.TypedDict):
     """One recipe, as an operator agrees to what it does."""
 
@@ -406,29 +398,20 @@ class PluginRequest(typing.TypedDict):
 class PluginStep(typing.TypedDict):
     """One call a recipe makes, in the order it makes them."""
 
-    adapter: typing.NotRequired[PluginStepAdapter | None]
-    """The adapter the destination is reached through, or nothing where it is a name
-    outside the stack, which no adapter of lemonfiber's speaks to.
-    """
     id: str
     """The step's id within its recipe."""
     method: str
     """The HTTP method it calls with."""
+    native: typing.NotRequired[str | None]
+    """The API the destination is reached in, as the installed plugin providing it
+    declares it, or nothing where none does or it is a name outside the stack.
+    """
     path: str
     """The path it calls."""
     to: str
     """Where it calls: a service of this stack's or the plugin's own, or a name outside
     both, as the manifest wrote it. Never a resolved address.
     """
-
-
-class PluginStepAdapter(typing.TypedDict):
-    """The adapter a call reaches its destination through."""
-
-    kind: ApiKind
-    """Which of lemonfiber's adapters it is."""
-    owner: PluginAdapterOwner
-    """Whose it is, which is lemonfiber's."""
 
 
 class PluginStepRan(typing.TypedDict):
@@ -485,6 +468,18 @@ it carries nothing outside the union of the rows the published points take.
 """
 
 
+PluginGranting = typing.TypedDict(
+    "PluginGranting",
+    {
+        "approval": str,
+        "credential": str,
+        "for": str,
+        "of": str,
+    },
+)
+"""One credential that would cross to a plugin, as the reading states it."""
+
+
 PluginPair = typing.TypedDict(
     "PluginPair",
     {
@@ -502,6 +497,7 @@ PluginPair = typing.TypedDict(
 PluginSecret = typing.TypedDict(
     "PluginSecret",
     {
+        "captured": typing.NotRequired[bool],
         "for": typing.NotRequired[str | None],
         "id": str,
         "lapses_s": typing.NotRequired[int | None],
@@ -517,12 +513,10 @@ PluginSecret = typing.TypedDict(
 
 
 __all__ = [
-    "ApiKind",
     "Contribution",
     "Expect",
     "Expected",
     "ExpectedKind",
-    "PluginAdapterOwner",
     "PluginAsking",
     "PluginChange",
     "PluginChangedCheck",
@@ -533,9 +527,12 @@ __all__ = [
     "PluginEvidence",
     "PluginExpectedFailure",
     "PluginFailingAsDeclared",
+    "PluginGranting",
     "PluginOverriding",
     "PluginPair",
     "PluginPuts",
+    "PluginReachedHousehold",
+    "PluginReachedLoopback",
     "PluginRecipe",
     "PluginRecipeInput",
     "PluginRecipeOn",
@@ -543,7 +540,6 @@ __all__ = [
     "PluginRequest",
     "PluginSecret",
     "PluginStep",
-    "PluginStepAdapter",
     "PluginStepRan",
     "ServiceConstant",
 ]
