@@ -9,6 +9,7 @@ import typing
 
 from ..shared.dashboard__lifecycle__status import Service
 from ..shared.lifecycle__migration import ConflictReport
+from ..shared.lifecycle__plugins__reset__settings__substitution__update import StackMoveTaken
 from ..shared.lifecycle__plugins__settings__substitution__update import Unvetted
 from ..shared.lifecycle__preview import Plan
 from ..shared.lifecycle__quality__reset__update import StackEdit
@@ -44,6 +45,11 @@ class LifecycleReport(typing.TypedDict):
     anything. Absent in the ordinary case — the client was already on it, or
     there is no tunnel to forward through — and a sentence where the client was
     moved, or could not be.
+    """
+    guards: typing.NotRequired[list[StackMoveTaken]]
+    """Each of lemonfiber's own guards this act moved onto its plugin, or on a rehearsal
+    would move, for good and with no yes of its own; one it could not move stays on
+    offer and says why.
     """
     held: typing.NotRequired[str | None]
     """Why nothing was run, where a start declined to run anything.

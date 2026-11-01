@@ -7,12 +7,15 @@ and CI fails on any difference.
 
 import typing
 
-from .api_kind import (
+from .expected import (
     Contribution,
     Expect,
     PluginAsking,
+    PluginChangedCheck,
     PluginDeclaration,
     PluginFailingAsDeclared,
+    PluginReachedHousehold,
+    PluginReachedLoopback,
     PluginRecipe,
     PluginRequest,
     ServiceConstant,
@@ -155,28 +158,6 @@ A tier and never an address, either way: lemonfiber renders one from the other
 exactly as it does for a bundled service, so the two-tier policy stays a property
 of the system rather than a request a plugin made.
 """
-
-
-class PluginReachedHousehold(typing.TypedDict):
-    """From the household, through the stack's own proxy, at this label."""
-
-    group: typing.NotRequired[str | None]
-    """The group on the bundled dashboard, where the manifest named one."""
-    hostname: str
-    """The single label in front of the operator's domain."""
-    port: int
-    """The port the service listens on."""
-    tier: typing.Literal["household"]
-
-
-class PluginReachedLoopback(typing.TypedDict):
-    """From this machine and nowhere else. No route, and no label to route to."""
-
-    group: typing.NotRequired[str | None]
-    """The group on the bundled dashboard, where the manifest named one."""
-    port: int
-    """The port the service listens on."""
-    tier: typing.Literal["loopback"]
 
 
 class PluginRequestProof(typing.TypedDict):
@@ -323,6 +304,26 @@ class PluginVerdictUnproven(typing.TypedDict):
     """What stopped it being run."""
 
 
+class PluginVerification(typing.TypedDict):
+    """What the stack's own checks made of an install."""
+
+    broke: list[PluginChangedCheck]
+    """Every check this install made worse.
+
+    Empty is the answer an install needs, and it is the common one. What is here
+    is what takes the install back.
+    """
+    unsettled: list[PluginChangedCheck]
+    """Every check nothing could be concluded about across the two readings.
+
+    Reported and never acted on. *I could not tell* is not *it is still broken*,
+    and an install reversed because a check could not reach a provider it also
+    could not reach an hour ago would be punishing a plugin for the weather. It is
+    said out loud rather than dropped, because the assurance an operator thought
+    they had is the thing that went.
+    """
+
+
 type RecordedWith = str | int | bool
 """What a recording gives a service in the operator's place: a constant reaching no third
 party, or, written `\"minted\"`, a value made for that run alone.
@@ -367,8 +368,17 @@ class ServiceFields(typing.TypedDict):
     """Where the whole configuration directory of the service it fronts lands in it."""
     tmpfs: typing.NotRequired[list[str]]
     """Its scratch paths in memory."""
-    user_mode: typing.NotRequired[ServiceUserMode | None]
+    user_mode: typing.NotRequired[ServiceUserModeWritten | None]
     """Who it runs as, where declared."""
+
+
+class ServiceIdVariables(typing.TypedDict):
+    """The two variables an image reads the operator's uid and gid from."""
+
+    gid_env: str
+    """The variable it reads the operator's gid from."""
+    uid_env: str
+    """The variable it reads the operator's uid from."""
 
 
 class ServiceNetwork(typing.TypedDict):
@@ -435,7 +445,13 @@ class ServiceUrlOf(typing.TypedDict):
 
 
 type ServiceUserMode = typing.Literal["image", "puid-env", "uid"]
-"""Who the container runs as."""
+"""A user mode a manifest writes by name."""
+
+
+type ServiceUserModeWritten = ServiceUserMode | ServiceIdVariables
+"""How a manifest writes [`UserMode`]: a mode by name, or the variables an image reads
+the operator's ids from.
+"""
 
 
 type ServiceValue = ServiceConstant | ServiceSetting | ServiceUrlOf | ServiceSecretOf
@@ -455,18 +471,6 @@ class SettingChoiceNeeding(typing.TypedDict):
     """What they are choices under."""
     values: list[ServiceConstant]
     """The values."""
-
-
-PluginGranting = typing.TypedDict(
-    "PluginGranting",
-    {
-        "approval": str,
-        "credential": str,
-        "for": str,
-        "of": str,
-    },
-)
-"""One credential that would cross to a plugin, as the reading states it."""
 
 
 PluginInstalled = typing.TypedDict(
@@ -507,13 +511,10 @@ ServiceMount = typing.TypedDict(
 
 
 __all__ = [
-    "PluginGranting",
     "PluginInstalled",
     "PluginPlaced",
     "PluginProving",
     "PluginReached",
-    "PluginReachedHousehold",
-    "PluginReachedLoopback",
     "PluginRequestProof",
     "PluginRun",
     "PluginRunProof",
@@ -526,9 +527,11 @@ __all__ = [
     "PluginVerdictOpen",
     "PluginVerdictPassed",
     "PluginVerdictUnproven",
+    "PluginVerification",
     "RecordedWith",
     "ServiceCertificate",
     "ServiceFields",
+    "ServiceIdVariables",
     "ServiceMount",
     "ServiceNetwork",
     "ServicePosture",
@@ -537,6 +540,7 @@ __all__ = [
     "ServiceSetting",
     "ServiceUrlOf",
     "ServiceUserMode",
+    "ServiceUserModeWritten",
     "ServiceValue",
     "SettingChoice",
     "SettingChoiceNeeding",

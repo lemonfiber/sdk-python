@@ -7,15 +7,16 @@ and CI fails on any difference.
 
 import typing
 
-from .api_kind import (
+from .expected import (
     PluginChange,
-    PluginChangedCheck,
     PluginDemand,
     PluginEvidence,
+    PluginGranting,
     PluginOverriding,
     PluginRecipeRan,
 )
-from .plugin_granting import PluginGranting, PluginInstalled, PluginProving, PluginSharing, PluginTaking
+from .plugin_reached import PluginInstalled, PluginProving, PluginSharing, PluginTaking, PluginVerification
+from ...shared.lifecycle__plugins__reset__settings__substitution__update import StackMoveTaken
 from ...shared.lifecycle__plugins__settings__substitution__update import Unvetted
 from ...shared.plugins__settings__status import Waiting
 from ...shared.plugins__undo import UndoReversal
@@ -138,6 +139,11 @@ class PluginInstalls(typing.TypedDict):
 
     Boxed for the reason the install is: it carries a whole recipe, and every other
     run's report would otherwise be as large as the one run that asks for one.
+    """
+    guards: typing.NotRequired[list[StackMoveTaken]]
+    """Each of lemonfiber's own guards this run moved onto its plugin after its own
+    change, or on a reading would move, for good and with no yes of its own; one it
+    could not move stays on offer and says why.
     """
     install: typing.NotRequired[PluginInstall | None]
     """What this run's install came to, or nothing where it only read.
@@ -354,26 +360,6 @@ class PluginUnfilled(typing.TypedDict):
     """
 
 
-class PluginVerification(typing.TypedDict):
-    """What the stack's own checks made of an install."""
-
-    broke: list[PluginChangedCheck]
-    """Every check this install made worse.
-
-    Empty is the answer an install needs, and it is the common one. What is here
-    is what takes the install back.
-    """
-    unsettled: list[PluginChangedCheck]
-    """Every check nothing could be concluded about across the two readings.
-
-    Reported and never acted on. *I could not tell* is not *it is still broken*,
-    and an install reversed because a check could not reach a provider it also
-    could not reach an hour ago would be punishing a plugin for the weather. It is
-    said out loud rather than dropped, because the assurance an operator thought
-    they had is the thing that went.
-    """
-
-
 class PluginsEnvelope(typing.TypedDict):
     """The envelope carrying `plugins`."""
 
@@ -448,7 +434,6 @@ __all__ = [
     "PluginSubstituted",
     "PluginUnfilled",
     "PluginUpdate",
-    "PluginVerification",
     "PluginsEnvelope",
     "WiringContest",
 ]

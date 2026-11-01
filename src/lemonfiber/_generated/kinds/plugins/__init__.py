@@ -5,15 +5,15 @@ Generated from the contract vendored in `contract/`. Do not edit: `just generate
 and CI fails on any difference.
 """
 
-from . import api_kind as _api_kind
-from . import plugin_granting as _plugin_granting
-from . import plugin_verification as _plugin_verification
+from . import expected as _expected
+from . import plugin_reached as _plugin_reached
+from . import wiring_contest as _wiring_contest
 
-from .api_kind import *
-from .plugin_granting import *
-from .plugin_verification import *
+from .expected import *
+from .plugin_reached import *
+from .wiring_contest import *
 
 __all__: list[str] = []
-__all__ += _api_kind.__all__
-__all__ += _plugin_granting.__all__
-__all__ += _plugin_verification.__all__
+__all__ += _expected.__all__
+__all__ += _plugin_reached.__all__
+__all__ += _wiring_contest.__all__
