@@ -7,7 +7,7 @@ commit hash; both name exactly one contract, so the vendored bytes can always
 be checked against what that revision served.
 
 lemonfiber serves the contract as the directory `contract/web-api/`, an index
-naming one file per kind, per definition and per list, or, at an older revision,
+naming one file per kind, per definition and per list or part of a list, or, at an older revision,
 as the single file `contract/web-api.contract.json`. Whichever the revision
 holds is vendored, and the other layout is removed.
 
@@ -43,7 +43,10 @@ TIMEOUT_SECONDS = 30
 REVISION = re.compile(r"^(v\d+\.\d+\.\d+|[0-9a-f]{40})$")
 """A release tag, or a full commit hash: an abbreviated one names one contract today and may not later."""
 LISTS = ("key_callable", "reads", "refusals")
-"""The lists the index names a file for, beside the kinds."""
+"""The lists the index names a file for, or a file for each part of, beside the kinds."""
+
+type Fields = dict[str, object]
+"""A JSON object, as `json` decodes one."""
 
 type Contract = dict[pathlib.PurePosixPath, bytes]
 """A contract's files by their path in the repository: the one file, or every file of the directory."""
@@ -131,17 +134,27 @@ def described(contract: Contract, revision: str) -> tuple[int, int]:
     fields = decoded(contract, head, revision)
     if not isinstance(fields, dict):
         refuse(f"{head} at {revision} is not an object")
-    read = cast("dict[str, object]", fields)
+    read = cast("Fields", fields)
     version = read.get("api_version")
     kinds = read.get("kinds")
     if not isinstance(version, int) or not isinstance(kinds, dict):
         refuse(f"{head} at {revision} names no api_version or no kinds")
-    listed = cast("dict[str, object]", kinds)
+    listed = cast("Fields", kinds)
     if head == INDEX:
-        for file in [*listed.values(), *(read[one] for one in LISTS if one in read)]:
+        for file in [*listed.values(), *listed_files(read)]:
             if not isinstance(file, str) or DIRECTORY / file not in contract:
                 refuse(f"{INDEX} at {revision} names {json.dumps(file)}, which the revision does not hold")
     return version, len(listed)
+
+
+def listed_files(index: Fields) -> list[object]:
+    """Return the file the index names for each list, or the file for each part of a list it splits into parts."""
+    named: list[object] = []
+    for one in LISTS:
+        if one in index:
+            parts = index[one]
+            named.extend(cast("Fields", parts).values() if isinstance(parts, dict) else [parts])
+    return named
 
 
 def vendor(root: pathlib.Path, contract: Contract, revision: str) -> None:

@@ -2,7 +2,9 @@
 """The vendored contract, read whole from whichever layout `contract/` holds it in.
 
 The directory `contract/web-api/` is an index naming a file for each kind and
-each list, and a file for each definition under `defs/`, named for it. A `$ref`
+each list, or for each part of a list, and a file for each definition under
+`defs/`, named for it. The parts of a list are gathered into the one object the
+single file holds, and an entry two parts both list is refused. A `$ref`
 is a path resolved against the file it sits in. The directory is read into the
 artefact the single file `contract/web-api.contract.json` holds: each kind
 carrying under `$defs` every definition it reaches, and every reference spelled
@@ -67,9 +69,26 @@ class Directory:
         whole: dict[str, object] = {"api_version": index.get("api_version")}
         for listed in LISTS:
             if listed in index:
-                whole[listed] = document(self.root, self.named(index[listed]))
+                whole[listed] = self.listed(listed, index[listed])
         whole["kinds"] = {kind: self.kind(self.named(file)) for kind, file in kinds.items()}
         return whole
+
+    def listed(self, name: str, files: object) -> object:
+        """Return a list the index names one file for, or a file for each part of, gathered into one object."""
+        parts = object_of(files)
+        if parts is None:
+            return document(self.root, self.named(files))
+        gathered: dict[str, object] = {}
+        for part, file in parts.items():
+            path = self.named(file)
+            entries = object_of(document(self.root, path))
+            if entries is None:
+                refuse(f"{path} holds the {name} of `{part}`, and it is not a JSON object")
+            for key, entry in entries.items():
+                if key in gathered:
+                    refuse(f"{path} lists `{key}`, which another file of the {name} lists too")
+                gathered[key] = entry
+        return gathered
 
     @staticmethod
     def named(file: object) -> pathlib.PurePosixPath:

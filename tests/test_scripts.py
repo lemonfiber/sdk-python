@@ -61,6 +61,21 @@ def test_a_revision_holding_the_directory_is_vendored_as_the_directory_and_the_s
     )
 
 
+def test_a_list_the_index_names_a_file_for_each_part_of_is_vendored_part_by_part(
+    tmp_path: pathlib.Path,
+) -> None:
+    parts = {"ADMIT": "refusals/ADMIT.json", "ASK": "refusals/ASK.json"}
+    served = {
+        **SPLIT,
+        INDEX: {"api_version": 1, "kinds": {"start": "kinds/start.json"}, "refusals": parts},
+        "contract/web-api/refusals/ADMIT.json": {},
+        "contract/web-api/refusals/ASK.json": {},
+    }
+    assert contract_sync.run([REVISION], tmp_path, lambda _: tarball(served)) == 0
+    for file in parts.values():
+        assert (tmp_path / "contract/web-api" / file).is_file()
+
+
 def test_a_revision_holding_the_single_file_removes_a_vendored_directory(tmp_path: pathlib.Path) -> None:
     assert contract_sync.run([REVISION], tmp_path, lambda _: tarball(SPLIT)) == 0
     assert contract_sync.run([REVISION], tmp_path, lambda _: SERVED) == 0
@@ -102,6 +117,12 @@ INDEX = "contract/web-api/index.json"
         (
             tarball({**SPLIT, INDEX: {"api_version": 1, "kinds": {}, "reads": "../reads.json"}}),
             '"../reads.json"',
+        ),
+        (
+            tarball(
+                {**SPLIT, INDEX: {"api_version": 1, "kinds": {}, "refusals": {"ASK": "refusals/ASK.json"}}},
+            ),
+            '"refusals/ASK.json"',
         ),
         (
             tarball(SPLIT, links=("contract/web-api/defs/Link.json",)),
