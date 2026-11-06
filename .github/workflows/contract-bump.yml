@@ -6,9 +6,11 @@
 # takes the contract instead, on a branch of its own, so an author who came to
 # fix a comment is not handed a contract sync.
 #
-# It merges itself only when the regeneration is clean. A contract that changes
-# a shape this package exposes is a change here rather than a bump, and that is
-# not a thing to merge unread.
+# It merges itself only when the regeneration is clean and the comparison of
+# what it breaks finished. A break of what a consumer vendors is declared the way
+# every change here declares one, with `!` after the type and listed as accepted,
+# and named in the body (OPS-R95), so the backward-compatibility check reads it
+# as meant.
 name: contract-bump
 
 on:
@@ -53,6 +55,7 @@ jobs:
       branch: ${{ env.BRANCH }}
       head: ${{ steps.commit.outputs.built }}
       clean: ${{ steps.commit.outputs.clean }}
+      measured: ${{ steps.breaks.outcome }}
       title: ${{ steps.said.outputs.title }}
       body: ${{ steps.said.outputs.body }}
     steps:
@@ -73,8 +76,19 @@ jobs:
           permission-contents: write
           permission-pull-requests: read
 
+      # The whole history, so the comparison below can load the commits a
+      # consumer vendors.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check out the canonical spec
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: lemonfiber/spec
+          ref: main
+          path: .spec-canonical
           persist-credentials: false
 
       - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
@@ -141,6 +155,26 @@ jobs:
           uv run --locked --no-build just types
           uv run --locked --no-build just test
 
+      # What the regenerated tree breaks of what a consumer vendors and nothing
+      # accepts yet, by the comparison the backward-compatibility check makes
+      # (OPS-R95). Its own step, so a comparison that did not finish is told
+      # apart from one that found nothing.
+      - name: What the regenerated tree breaks
+        id: breaks
+        if: steps.behind.outputs.moved == 'yes'
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          uv run --locked --no-build python scripts/backward_compat.py --spec .spec-canonical --kept | tee "${RUNNER_TEMP}/breaks.out"
+          delimiter="breaks_$(openssl rand -hex 16)"
+          {
+            echo "found<<${delimiter}"
+            grep '^\[BC\] ' "${RUNNER_TEMP}/breaks.out" || true
+            echo "${delimiter}"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Put the change on the branch, signed
         id: commit
         if: steps.behind.outputs.moved == 'yes'
@@ -149,6 +183,8 @@ jobs:
           PIN: ${{ steps.behind.outputs.pin }}
           HEAD_SHA: ${{ steps.behind.outputs.head }}
           CLEAN: ${{ steps.build.outcome }}
+          MEASURED: ${{ steps.breaks.outcome }}
+          BREAKS: ${{ steps.breaks.outputs.found }}
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
@@ -165,6 +201,17 @@ jobs:
           # the step under `pipefail`.
           git status --porcelain=v1 -z --untracked-files=all > "${RUNNER_TEMP}/status"
           changed="$(uv run --locked --no-build python -m scripts.what_the_bump_takes < "${RUNNER_TEMP}/status")"
+
+          # A break the comparison kept is written into the list of accepted
+          # breaks, in the commit that makes it: the one change outside
+          # `contract/` and the generated package a bump may carry, made here,
+          # after the refusal above has read the tree the build left.
+          bang=""
+          if [ "$MEASURED" = "success" ] && [ -n "$BREAKS" ]; then
+            printf '%s\n' "$BREAKS" | uv run --locked --no-build python scripts/backward_compat.py --accept
+            changed="${changed}"$'\n'"A pyproject.toml"
+            bang="!"
+          fi
           printf '%s\n' "$changed"
 
           # Pushed only when the push would change something. Every push moves
@@ -231,7 +278,8 @@ jobs:
           if not pulls:
               sys.exit(f"pushing: no pull request is open on {branch}")
           pull = pulls[0]
-          if os.environ["CLEAN"] == "success" and not pull.get("auto_merge"):
+          armed = os.environ["CLEAN"] == "success" and os.environ["MEASURED"] == "success"
+          if armed and not pull.get("auto_merge"):
               sys.exit(f"pushing: #{pull['number']} has no auto-merge armed, which a clean run leaves")
 
           base = api(f"repos/{repo}/compare/main...{head}")["merge_base_commit"]["sha"]
@@ -290,6 +338,12 @@ jobs:
           else
             body="The regeneration did not come out clean, so this is a change here rather than a catch-up. Read it before merging."
           fi
+          if [ "$MEASURED" != "success" ]; then
+            body="${body} The comparison of what it breaks did not finish."
+          elif [ -n "$BREAKS" ]; then
+            listed="$(printf '%s\n' "$BREAKS" | sed 's/^\[BC\] /- /')"
+            body="${body}"$'\n\n'"It breaks what a consumer vendors:"$'\n'"${listed}"
+          fi
 
           # The request goes in a file, not in an argument: the artefact and the
           # generated module are large, and base64 of both on a command line
@@ -297,13 +351,13 @@ jobs:
           #
           # Building the JSON in Python also means the message and the file
           # contents are encoded rather than quoted into place by hand.
-          CHANGED="$changed" python3 - "$REPO" "$staging" "$base" "$HEAD_SHA" "$PIN" "$body" <<'PY' >"${RUNNER_TEMP}/request.json"
+          CHANGED="$changed" python3 - "$REPO" "$staging" "$base" "$HEAD_SHA" "$PIN" "$body" "$bang" <<'PY' >"${RUNNER_TEMP}/request.json"
           import base64
           import json
           import os
           import sys
 
-          repo, branch, base, head, pin, note = sys.argv[1:7]
+          repo, branch, base, head, pin, note, bang = sys.argv[1:8]
           changed = [line.split(" ", 1) for line in os.environ["CHANGED"].splitlines()]
 
           print(json.dumps({
@@ -319,7 +373,7 @@ jobs:
                       },
                       "expectedHeadOid": base,
                       "message": {
-                          "headline": f"chore(contract): take lemonfiber {head[:8]}",
+                          "headline": f"chore(contract){bang}: take lemonfiber {head[:8]}",
                           # commitlint, dco and spec-check each read this, and
                           # spec-check closes a pull request whose citation it
                           # cannot resolve.
@@ -383,20 +437,32 @@ jobs:
           PIN: ${{ steps.behind.outputs.pin }}
           HEAD_SHA: ${{ steps.behind.outputs.head }}
           CLEAN: ${{ steps.commit.outputs.clean }}
+          MEASURED: ${{ steps.breaks.outcome }}
+          BREAKS: ${{ steps.breaks.outputs.found }}
         run: |
           set -euo pipefail
 
           if [ "$CLEAN" = "success" ]; then
-            verdict="**The types compile and the suite passes.** Nothing this package exposes changed shape."
+            verdict="**The types compile and the suite passes.**"
           else
-            verdict="**The regeneration did not come out clean.** The contract has changed a shape this package exposes, so taking it is a change here rather than a catch-up. Read the failing run before merging; do not force it green."
+            verdict="**The regeneration did not come out clean.** Read the failing run before merging; do not force it green."
+          fi
+          bang=""
+          if [ "$MEASURED" != "success" ]; then
+            breaks="**The comparison of what this breaks did not finish**, so nothing here says whether it breaks what a consumer vendors, and it is left for a person to merge. Read the run's \`What the regenerated tree breaks\` step."
+          elif [ -n "$BREAKS" ]; then
+            bang="!"
+            listed="$(printf '%s\n' "$BREAKS" | sed 's/^\[BC\] /- /')"
+            breaks="**What breaks.** Against the commits a consumer vendors, each listed as accepted in \`pyproject.toml\` here:"$'\n\n'"${listed}"
+          else
+            breaks="**Nothing this package exports broke** against the commits a consumer vendors."
           fi
 
           # Handed to the next job, which opens or edits the pull request.
           # The delimiter is random, so no line of the body can end the value.
           delimiter="body_$(openssl rand -hex 16)"
           {
-            echo "title=chore(contract): take lemonfiber ${HEAD_SHA:0:8}"
+            echo "title=chore(contract)${bang}: take lemonfiber ${HEAD_SHA:0:8}"
             echo "body<<${delimiter}"
             printf '%s\n' \
               "\`contract-drift\` runs on every pull request here, and the vendored artefact was behind. This takes the contract so that the next author to open a pull request is not handed a sync they did not come for." \
@@ -405,6 +471,8 @@ jobs:
               "- now: \`${HEAD_SHA}\`" \
               "" \
               "${verdict}" \
+              "" \
+              "${breaks}" \
               "" \
               "Opened by \`contract-bump\`, which the server's own \`contract-moved\` fires whenever the artefact changes." \
               "" \
@@ -415,8 +483,8 @@ jobs:
   # The pull request is opened, or the open one edited, only where it is this
   # bump's own: the release app opened it from this repository's branch and it
   # is at the commit above (OPS-R87). It merges itself only where the
-  # regeneration was clean; otherwise any arming is switched off, because
-  # the change wants a person.
+  # regeneration was clean and the comparison finished; otherwise any arming
+  # is switched off, because the change wants a person.
   pull-request:
     needs: bump
     if: needs.bump.outputs.head != ''
@@ -428,7 +496,7 @@ jobs:
       head: ${{ needs.bump.outputs.head }}
       title: ${{ needs.bump.outputs.title }}
       body: ${{ needs.bump.outputs.body }}
-      auto-merge: ${{ needs.bump.outputs.clean == 'success' }}
-      disarm: ${{ needs.bump.outputs.clean != 'success' }}
+      auto-merge: ${{ needs.bump.outputs.clean == 'success' && needs.bump.outputs.measured == 'success' }}
+      disarm: ${{ needs.bump.outputs.clean != 'success' || needs.bump.outputs.measured != 'success' }}
     secrets:
       RELEASE_APP_KEY: ${{ secrets.RELEASE_APP_KEY }}

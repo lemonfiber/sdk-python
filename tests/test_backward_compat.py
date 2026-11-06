@@ -2,6 +2,7 @@
 """The backward-compatibility check: who consumes this package, what breaks them, and which breaks are accepted."""
 
 import base64
+import io
 import sys
 from typing import TYPE_CHECKING
 
@@ -473,6 +474,147 @@ def test_a_break_is_named_by_its_object_and_the_parameter_it_is_to(tmp_path: pat
         for one in map(backward_compat.break_of, griffe.find_breaking_changes(old, new))
     )
     assert found == [("surface.GONE", "object-removed"), ("surface.ask(query)", "parameter-removed")]
+
+
+def kept_by(
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+    found: tuple[backward_compat.Break, ...],
+    accepted: str = "[]",
+) -> int:
+    """Ask what a bump keeps against one consumer's pin, finding these breaks, with these accepted."""
+    monkeypatch.setattr(backward_compat, "breakages", breaking(*found))
+    return backward_compat.kept(
+        spec_with(tmp_path / "spec", MAP),
+        project(tmp_path / "repo", accepted),
+        recording(REVISION),
+    )
+
+
+def test_a_bump_keeps_each_break_nothing_accepts_once_and_sorted(
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert kept_by(tmp_path, monkeypatch, (GONE, ASK, GONE)) == 0
+    assert capsys.readouterr().out == (
+        "[BC] `lemonfiber.Gone`: object-removed\n[BC] `lemonfiber.ask(query)`: parameter-removed\n"
+    )
+
+
+def test_a_bump_keeps_no_break_already_accepted(
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert kept_by(tmp_path, monkeypatch, (GONE,), ACCEPTING_GONE) == 0
+    assert capsys.readouterr().out == ""
+
+
+def test_a_bump_finds_nothing_kept_where_nothing_breaks_or_no_consumer_records_a_pin(
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert kept_by(tmp_path, monkeypatch, ()) == 0
+    empty = spec_with(tmp_path / "other", "repo = []\n")
+    assert backward_compat.kept(empty, tmp_path / "repo", answers_nothing) == 0
+    assert capsys.readouterr().out == ""
+
+
+def test_a_comparison_that_cannot_finish_says_so_and_keeps_nothing(
+    tmp_path: pathlib.Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    spec = spec_with(tmp_path / "spec", MAP)
+    unlisted = project(tmp_path / "unlisted", '[{ symbol = "lemonfiber.Gone" }]')
+    assert backward_compat.kept(spec, unlisted, recording(REVISION)) == backward_compat.UNFINISHED
+    assert "names its symbol, its kind and its reason" in capsys.readouterr().err
+    assert (
+        backward_compat.kept(spec, project(tmp_path / "repo"), recording("main"))
+        == backward_compat.UNFINISHED
+    )
+    read = capsys.readouterr()
+    assert "'main' in _vendor/lemonfiber/REVISION, which is not a full commit hash" in read.err
+    assert read.out == ""
+
+
+def stamped(root: pathlib.Path, accepted: str) -> pathlib.Path:
+    """Write a project accepting these breaks, holding a contract taken at `REVISION`."""
+    project(root, accepted)
+    (root / "contract").mkdir()
+    (root / "contract/VERSION").write_text(f"{REVISION}\n", encoding="utf-8")
+    return root
+
+
+REASON = "The contract at d2bf74b9 no longer holds it as it was."
+
+
+@pytest.mark.parametrize(
+    "listed",
+    ["[]", '[\n  { symbol = "lemonfiber.Held", kind = "object-removed", reason = "It says ]." },\n]'],
+)
+def test_a_kept_break_is_accepted_with_the_contract_as_its_reason(
+    tmp_path: pathlib.Path,
+    listed: str,
+) -> None:
+    repo = stamped(tmp_path, listed)
+    held = backward_compat.accepted(repo)
+    assert backward_compat.accept(repo, f"{GONE.kept()}\n{ASK.kept()}\n") == 0
+    assert backward_compat.accepted(repo) == held | {
+        ("lemonfiber.Gone", "object-removed"),
+        ("lemonfiber.ask(query)", "parameter-removed"),
+    }
+    written = (repo / "pyproject.toml").read_text(encoding="utf-8")
+    assert written.count(REASON) == 2
+    assert written.startswith("[tool.lemonfiber.backward-compatibility]\naccepted = [\n")
+    assert written.endswith("},\n]\n")
+
+
+def test_accepting_nothing_changes_nothing(tmp_path: pathlib.Path) -> None:
+    repo = stamped(tmp_path, "[]")
+    before = (repo / "pyproject.toml").read_text(encoding="utf-8")
+    assert backward_compat.accept(repo, "") == 0
+    assert (repo / "pyproject.toml").read_text(encoding="utf-8") == before
+
+
+def test_accepting_refuses_a_line_kept_never_writes_and_a_project_with_no_list(
+    tmp_path: pathlib.Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    repo = stamped(tmp_path, "[]")
+    before = (repo / "pyproject.toml").read_text(encoding="utf-8")
+    assert backward_compat.accept(repo, f"{GONE.kept()}\nsomething else\n") == backward_compat.UNFINISHED
+    assert "a line --kept does not write" in capsys.readouterr().err
+    assert (repo / "pyproject.toml").read_text(encoding="utf-8") == before
+    (repo / "pyproject.toml").write_text('[project]\nname = "x"\n', encoding="utf-8")
+    assert backward_compat.accept(repo, GONE.kept()) == backward_compat.UNFINISHED
+    assert "no list of accepted breaks" in capsys.readouterr().err
+
+
+def test_the_command_line_asks_what_a_bump_keeps_and_accepts_it(
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    asked: list[object] = []
+
+    def keeping(spec: pathlib.Path, repo: pathlib.Path) -> int:
+        asked.append((spec, repo))
+        return 3
+
+    def accepting(repo: pathlib.Path, lines: str) -> int:
+        asked.append((repo, lines))
+        return 4
+
+    monkeypatch.setattr(backward_compat, "kept", keeping)
+    monkeypatch.setattr(backward_compat, "accept", accepting)
+    monkeypatch.setattr(sys, "stdin", io.StringIO("lines"))
+    arguments = ["backward_compat.py", "--spec", str(tmp_path), "--repo", str(tmp_path)]
+    monkeypatch.setattr(sys, "argv", [*arguments, "--kept"])
+    assert backward_compat.main() == 3
+    monkeypatch.setattr(sys, "argv", [*arguments, "--accept"])
+    assert backward_compat.main() == 4
+    assert asked == [(tmp_path, tmp_path), (tmp_path, "lines")]
 
 
 def test_the_command_line_names_the_spec_and_the_tree(
