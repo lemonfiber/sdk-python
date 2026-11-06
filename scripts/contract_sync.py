@@ -45,6 +45,9 @@ REVISION = re.compile(r"^(v\d+\.\d+\.\d+|[0-9a-f]{40})$")
 LISTS = ("key_callable", "reads", "refusals")
 """The lists the index names a file for, or a file for each part of, beside the kinds."""
 
+type Fields = dict[str, object]
+"""A JSON object, as `json` decodes one."""
+
 type Contract = dict[pathlib.PurePosixPath, bytes]
 """A contract's files by their path in the repository: the one file, or every file of the directory."""
 
@@ -131,12 +134,12 @@ def described(contract: Contract, revision: str) -> tuple[int, int]:
     fields = decoded(contract, head, revision)
     if not isinstance(fields, dict):
         refuse(f"{head} at {revision} is not an object")
-    read = cast("dict[str, object]", fields)
+    read = cast("Fields", fields)
     version = read.get("api_version")
     kinds = read.get("kinds")
     if not isinstance(version, int) or not isinstance(kinds, dict):
         refuse(f"{head} at {revision} names no api_version or no kinds")
-    listed = cast("dict[str, object]", kinds)
+    listed = cast("Fields", kinds)
     if head == INDEX:
         for file in [*listed.values(), *listed_files(read)]:
             if not isinstance(file, str) or DIRECTORY / file not in contract:
@@ -144,13 +147,13 @@ def described(contract: Contract, revision: str) -> tuple[int, int]:
     return version, len(listed)
 
 
-def listed_files(index: dict[str, object]) -> list[object]:
+def listed_files(index: Fields) -> list[object]:
     """Return the file the index names for each list, or the file for each part of a list it splits into parts."""
     named: list[object] = []
     for one in LISTS:
         if one in index:
             parts = index[one]
-            named.extend(cast("dict[str, object]", parts).values() if isinstance(parts, dict) else [parts])
+            named.extend(cast("Fields", parts).values() if isinstance(parts, dict) else [parts])
     return named
 
 
