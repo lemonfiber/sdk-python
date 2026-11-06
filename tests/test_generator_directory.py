@@ -64,6 +64,28 @@ def test_a_directory_writes_the_files_its_single_file_writes(tmp_path: pathlib.P
     assert "type Code = str" in source(split, "shared", "error__word.py")
 
 
+def test_a_list_in_a_file_for_each_part_is_gathered_into_the_one_list_a_single_file_holds(
+    tmp_path: pathlib.Path,
+) -> None:
+    refusals = {
+        "ADMIT-4": {"name": "NOT_ADMITTED", "status": 403, "description": "Raised when nothing admits it."},
+        "ASK-1": {"name": "NOT_ASKED", "status": 400, "description": "Raised when nothing was asked."},
+    }
+    write_directory(tmp_path, {**WHOLE, "refusals": refusals})
+    index = json.loads((tmp_path / DIRECTORY / "index.json").read_text(encoding="utf-8"))
+    assert index["refusals"] == {"ADMIT": "refusals/ADMIT.json", "ASK": "refusals/ASK.json"}
+    whole, _ = read_artefact(tmp_path)
+    assert whole["refusals"] == refusals
+
+
+def test_a_list_in_one_file_is_read_as_an_older_core_writes_it(tmp_path: pathlib.Path) -> None:
+    write_directory(tmp_path, WHOLE)
+    (tmp_path / DIRECTORY / "refusals.json").write_text(json.dumps(WHOLE["refusals"]), encoding="utf-8")
+    amend(tmp_path, "index.json", setting("refusals", "refusals.json"))
+    whole, _ = read_artefact(tmp_path)
+    assert whole["refusals"] == WHOLE["refusals"]
+
+
 def test_a_reference_is_resolved_against_the_file_it_sits_in(tmp_path: pathlib.Path) -> None:
     write_directory(tmp_path, WHOLE)
     problem = json.loads((tmp_path / DIRECTORY / "defs/Problem.json").read_text(encoding="utf-8"))
@@ -222,6 +244,26 @@ def replaced_by(value: object) -> typing.Callable[[dict[str, object]], object]:
             ),
         ),
         ("index.json", setting("api_version", 2), "api_version 2"),
+        (
+            "index.json",
+            setting("refusals", {"ADMIT": "refusals/ADMIT.json", "AGAIN": "refusals/ADMIT.json"}),
+            "contract/web-api/refusals/ADMIT.json lists `ADMIT-4`, which another file of the refusals lists too",
+        ),
+        (
+            "index.json",
+            setting("refusals", {"ADMIT": "refusals/ADMIT.json", "GONE": "refusals/GONE.json"}),
+            "contract/web-api/refusals/GONE.json could not be",
+        ),
+        (
+            "index.json",
+            setting("refusals", {"ADMIT": "../ADMIT.json"}),
+            'names "../ADMIT.json", which is not a file in contract/web-api/',
+        ),
+        (
+            "refusals/ADMIT.json",
+            replaced_by([]),
+            "contract/web-api/refusals/ADMIT.json holds the refusals of `ADMIT`, and it is not a JSON object",
+        ),
     ],
 )
 def test_a_directory_this_generator_cannot_read_is_refused_naming_the_file(

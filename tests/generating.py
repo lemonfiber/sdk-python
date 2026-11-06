@@ -67,7 +67,20 @@ def write(root: pathlib.Path, whole: object, stamp: str | None = "v1.0.0") -> No
 
 
 LISTED = {"key_callable": "key-callable.json", "reads": "reads.json", "refusals": "refusals.json"}
-"""Each list the directory's index names, and the file the core writes it to."""
+"""Each list the directory's index names, and the file an older core writes it to."""
+
+PARTED = {"refusals"}
+"""The lists the core writes a file for each part of, keyed by the part: each code's family."""
+
+
+def parted(listed: object) -> dict[str, dict[str, object]] | None:
+    """Return a list split into its parts, each code under its family, or None for a list that is not an object."""
+    if not isinstance(listed, dict):
+        return None
+    parts: dict[str, dict[str, object]] = {}
+    for code, entry in typing.cast("dict[str, object]", listed).items():
+        parts.setdefault(code.rsplit("-", 1)[0], {})[code] = entry
+    return parts
 
 
 def relinked(node: object, prefix: str) -> object:
@@ -91,9 +104,15 @@ def exploded(whole: dict[str, object]) -> dict[str, object]:
     kinds: dict[str, str] = {}
     index: dict[str, object] = {"api_version": whole["api_version"], "kinds": kinds}
     for listed, file in LISTED.items():
-        if listed in whole:
+        if listed not in whole:
+            continue
+        parts = parted(whole[listed]) if listed in PARTED else None
+        if parts is None:
             index[listed] = file
             files[file] = whole[listed]
+            continue
+        index[listed] = {part: f"{listed}/{part}.json" for part in parts}
+        files.update({f"{listed}/{part}.json": entries for part, entries in parts.items()})
     for name, schema in typing.cast("dict[str, dict[str, object]]", whole["kinds"]).items():
         envelope = {key: value for key, value in schema.items() if key != "$defs"}
         kinds[name] = f"kinds/{name}.json"
