@@ -22,7 +22,14 @@ that symbol and that kind alone, and only where a commit since the consumer's
 pin is marked breaking, which is what puts it in the changelog. An entry that
 no longer matches a break is said so, to be removed.
 
+A contract bump asks the same comparison what it would break. `--kept` says each
+break of a consumer's pin the tree makes that nothing accepts yet, one line each,
+and exits 2 where the comparison cannot finish. `--accept` reads such lines and
+writes each into the list, with the contract's move as its reason.
+
     uv run python scripts/backward_compat.py --spec ../spec
+    uv run python scripts/backward_compat.py --spec ../spec --kept
+    uv run python scripts/backward_compat.py --accept < kept
 """
 
 import argparse
@@ -57,6 +64,15 @@ COMMIT = re.compile(r"^[0-9a-f]{40}$")
 TIMEOUT_SECONDS = 30
 VALUE_CHANGED = "attribute-changed-value"
 """The kind of break a public value that is no longer the one it was is accepted as."""
+
+KEPT = re.compile(r"^\[BC\] `(?P<symbol>[^`\n]+)`: (?P<kind>[a-z-]+)$")
+"""A line saying a break a bump keeps: `--kept` writes it and `--accept` reads it."""
+ACCEPTED_LIST = re.compile(r"^accepted = \[(?P<held>.*?)\]$", re.MULTILINE | re.DOTALL)
+"""The list of accepted breaks as `pyproject.toml` writes it, closed by the first `]` that ends a line."""
+UNFINISHED = 2
+"""What the command exits with where the comparison a bump asks for cannot finish."""
+STAMP = "contract/VERSION"
+"""Where the revision of the vendored contract is recorded, relative to the tree."""
 
 BREAKING = re.compile(r"\A\w+(\([^)\n]*\))?!:|^BREAKING[ -]CHANGE:", re.MULTILINE)
 """A commit message git-cliff files under breaking changes: `!` after its type, or a breaking-change footer."""
@@ -127,9 +143,13 @@ class Break:
     kind: str
     explained: str
 
-    def entry(self) -> str:
+    def entry(self, reason: str = "...") -> str:
         """Return the entry that would accept this break, as `pyproject.toml` lists one."""
-        return f'{{ symbol = "{self.symbol}", kind = "{self.kind}", reason = "..." }}'
+        return f'{{ symbol = "{self.symbol}", kind = "{self.kind}", reason = "{reason}" }}'
+
+    def kept(self) -> str:
+        """Return the line saying a bump keeps this break."""
+        return f"[BC] `{self.symbol}`: {self.kind}"
 
 
 def accepted(repo: pathlib.Path) -> set[tuple[str, str]]:
@@ -316,6 +336,51 @@ def run(spec: pathlib.Path, repo: pathlib.Path, fetch: Fetch = github) -> int:
     return 1 if failed else 0
 
 
+def kept(spec: pathlib.Path, repo: pathlib.Path, fetch: Fetch = github) -> int:
+    """Say each break of a consumer's pin the tree makes that nothing accepts, each once, sorted."""
+    try:
+        listed = accepted(repo)
+    except AcceptedRefusedError as refused:
+        sys.stderr.write(f"{refused}\n")
+        return UNFINISHED
+    found: set[str] = set()
+    for name in consumers(spec):
+        for pin in pins(name, fetch):
+            if not COMMIT.fullmatch(pin):
+                sys.stderr.write(f"{name} records {pin!r} in {RECORD}, which is not a full commit hash.\n")
+                return UNFINISHED
+            found.update(one.kept() for one in breakages(pin, repo) if (one.symbol, one.kind) not in listed)
+    for line in sorted(found):
+        sys.stdout.write(f"{line}\n")
+    return 0
+
+
+def accept(repo: pathlib.Path, lines: str) -> int:
+    """Write each break these lines say into the list of accepted breaks, with the contract's move as its reason."""
+    breaks = [KEPT.fullmatch(line) for line in lines.splitlines() if line]
+    named = [found for found in breaks if found is not None]
+    if len(named) != len(breaks):
+        sys.stderr.write(f"{lines!r} holds a line --kept does not write.\n")
+        return UNFINISHED
+    if not named:
+        return 0
+    project = repo / "pyproject.toml"
+    text = project.read_text(encoding="utf-8")
+    listing = ACCEPTED_LIST.search(text)
+    if listing is None:
+        sys.stderr.write("pyproject.toml holds no list of accepted breaks to write into.\n")
+        return UNFINISHED
+    revision = (repo / STAMP).read_text(encoding="utf-8").strip()[:8]
+    reason = f"The contract at {revision} no longer holds it as it was."
+    entries = "".join(f"  {Break(found['symbol'], found['kind'], '').entry(reason)},\n" for found in named)
+    held = listing["held"] or "\n"
+    project.write_text(
+        f"{text[: listing.start()]}accepted = [{held}{entries}]{text[listing.end() :]}",
+        encoding="utf-8",
+    )
+    return 0
+
+
 class Judge:
     """Says each break of a consumer's pin, accepted or not, keeping which accepted breaks were met."""
 
@@ -354,7 +419,17 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--spec", type=pathlib.Path, default=pathlib.Path(".spec-canonical"))
     parser.add_argument("--repo", type=pathlib.Path, default=ROOT)
+    parser.add_argument("--kept", action="store_true", help="say each break nothing accepts yet")
+    parser.add_argument(
+        "--accept",
+        action="store_true",
+        help="accept the breaks --kept said, read from stdin",
+    )
     arguments = parser.parse_args()
+    if arguments.accept:
+        return accept(arguments.repo, sys.stdin.read())
+    if arguments.kept:
+        return kept(arguments.spec, arguments.repo)
     return run(arguments.spec, arguments.repo)
 
 

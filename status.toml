@@ -44,4 +44,5 @@ requirement = [
   { id = "ARCH-R260", state = "partial", evidence = ["src/lemonfiber/_protocol/calls.py", "tests/test_device_keys.py::test_device_keys_are_listed_challenged_and_revoked_by_name"] },
   { id = "ARCH-R261", state = "partial", evidence = ["src/lemonfiber/keys.py", "tests/test_device_keys.py::test_a_mint_is_proved_by_a_signature_over_the_text_the_stack_verifies"] },
   { id = "ARCH-R293", state = "partial", evidence = ["src/lemonfiber/_generated/kinds/keys.py"] },
+  { id = "OPS-R95", state = "partial", evidence = [".github/workflows/contract-bump.yml", "tests/test_backward_compat.py::test_a_bump_keeps_each_break_nothing_accepts_once_and_sorted", "tests/test_backward_compat.py::test_a_kept_break_is_accepted_with_the_contract_as_its_reason"] },
 ]
