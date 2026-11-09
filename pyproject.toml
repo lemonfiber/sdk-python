@@ -112,6 +112,7 @@ accepted = [
   { symbol = "lemonfiber.contract.PluginAdapterOwner", kind = "object-removed", reason = "A step names the API its destination is reached in rather than an adapter, so the contract describes no adapter's owner." },
   { symbol = "lemonfiber.contract.PluginStepAdapter", kind = "object-removed", reason = "A step names the API its destination is reached in rather than an adapter, so the contract describes no step's adapter." },
   { symbol = "lemonfiber._generated.kinds.plugins.api_kind.PluginStep.adapter", kind = "object-removed", reason = "A step names the API its destination is reached in as `native` where it named an adapter as `adapter`." },
+  { symbol = "lemonfiber._generated.kinds.news_items.NewsRequest.number", kind = "object-removed", reason = "The contract at 45d01b47 no longer holds it as it was." },
 ]
 
 [tool.lemonfiber.line-cap]
