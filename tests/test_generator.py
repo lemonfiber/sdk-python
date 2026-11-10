@@ -392,6 +392,10 @@ def test_an_artefact_older_than_the_read_list_names_no_read(tmp_path: pathlib.Pa
             [served("/api/held/{id}/poster/x")],
             'entry 0: path "/api/held/{id}/poster/x" is not a read\'s path',
         ),
+        (
+            [served("/api/askable/kinds/all")],
+            'entry 0: path "/api/askable/kinds/all" is not a read\'s path',
+        ),
         ([served("/api/status", kinds="pull")], 'entry 0: kinds "pull" is not a list of kinds'),
         (
             [served("/api/status", kinds=["push"])],
@@ -439,6 +443,14 @@ def test_a_file_read_with_a_word_after_its_segment_is_the_path_a_caller_fills(tm
     assert module.READS[module.Read.HELD_ID_SEASONS].segments == ("id",)
     written = source(tmp_path, "reads.py")
     assert '"""Answers with a file, for the `id` in its path; takes `member`."""' in written
+
+
+def test_a_read_with_a_second_word_is_named_for_both(tmp_path: pathlib.Path) -> None:
+    listed = [served("/api/askable"), served("/api/askable/kinds", parameters=[parameter("member")])]
+    module = generated(tmp_path, artefact(PULL, reads=listed))
+    assert list(module.Read) == ["askable", "askable/kinds"]
+    assert module.Read.ASKABLE_KINDS.path == "/api/askable/kinds"
+    assert module.READS[module.Read.ASKABLE_KINDS].segments == ()
 
 
 def test_a_read_whose_path_a_caller_fills_keeps_its_segment(tmp_path: pathlib.Path) -> None:
