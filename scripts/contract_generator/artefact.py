@@ -58,9 +58,9 @@ PATH_WORD = r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*"
 PATH_PLACEHOLDER = r"\{[a-z][a-z_]*\}"
 """The one placeholder a read's path may carry: `{name}`."""
 
-READ_PATH = re.compile(rf"^/api/{PATH_WORD}(?:/{PATH_PLACEHOLDER}(?:/{PATH_WORD})?)?$")
-"""A read's path, as the core spells one: `/api/front-door`, `/api/bundle/{name}` with its one placeholder, or
-`/api/held/{id}/poster` with a word after it."""
+READ_PATH = re.compile(rf"^/api/{PATH_WORD}(?:/{PATH_WORD})?(?:/{PATH_PLACEHOLDER}(?:/{PATH_WORD})?)?$")
+"""A read's path, as the core spells one: `/api/front-door`, `/api/askable/kinds` with a second word,
+`/api/bundle/{name}` with its one placeholder, or `/api/held/{id}/poster` with a word after it."""
 
 PARAMETER = re.compile(r"^[a-z][a-z0-9_]*$")
 """A query parameter's name, as the core spells one: `most`."""
