@@ -74,6 +74,16 @@ def generate(
     names = sorted(kinds)
     for kind in names:
         writer.owned[f"{pascal(kind)}Envelope"] = f"the envelope carrying `{kind}`"
+    tables = [
+        envelope_module(names),
+        narrowing_module(names),
+        key_callable_module(callable_by_key),
+        reads_module(reads),
+        *refusals_modules(refusals),
+    ]
+    for table in tables:
+        for name in table.names:
+            writer.owned.setdefault(name, f"what `{'.'.join(table.path)}` hands on under that name")
     for kind in names:
         writer.kind = kind
         writer.definitions = as_map(kinds[kind].get("$defs", {}))
@@ -88,12 +98,8 @@ def generate(
     shared_paths = sorted(path for path in layout.groups if path[: len(SHARED_PACKAGE)] == SHARED_PACKAGE)
     modules.extend(
         [
-            envelope_module(names),
-            narrowing_module(names),
-            key_callable_module(callable_by_key),
-            reads_module(reads),
+            *tables,
             index(KINDS_PACKAGE, "Every kind's envelope, and the shapes only that kind carries.", kind_paths),
-            *refusals_modules(refusals),
         ],
     )
     members = [("envelope",), ("key_callable",), KINDS_PACKAGE, ("narrowing",), ("reads",), REFUSALS_PACKAGE]

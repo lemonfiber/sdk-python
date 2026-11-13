@@ -1,6 +1,8 @@
 # Copyright (c) 2026 NightWorksIO
 """Generating the shapes from the artefact, and refusing an artefact that cannot be read one way."""
 
+import ast
+import copy
 import json
 import pathlib
 import typing
@@ -8,7 +10,7 @@ import typing
 import pytest
 
 from scripts import contract_generate
-from scripts.contract_generator import OUT, generate, run
+from scripts.contract_generator import OUT, ArtefactRefusedError, generate, run
 from scripts.contract_generator.vendored import read_artefact
 from scripts.contract_sync import STAMP
 from tests.generating import CODE, artefact, generated, keys, kind, refusal, source, write
@@ -534,6 +536,33 @@ def test_a_described_reference_is_ordinary_company() -> None:
 def test_a_definition_taking_a_name_the_generator_writes_is_refused_naming_it_and_its_kind(name: str) -> None:
     said = refusal(artefact({"a": kind({"$ref": f"#/$defs/{name}"}, {name: CODE})}))
     assert f"`{name}`, defined by `a`, takes a name this generator writes itself" in said
+
+
+def test_a_definition_taking_a_name_a_table_hands_on_is_refused_naming_it_and_its_kind() -> None:
+    root = pathlib.Path(__file__).resolve().parent.parent
+    tables = [
+        path
+        for path in (root / OUT).rglob("*.py")
+        if path.parent.name not in {"kinds", "shared"} and path.name != "__init__.py"
+    ]
+    handed_on: set[str] = set()
+    for path in tables:
+        for node in ast.parse(path.read_text(encoding="utf-8")).body:
+            if isinstance(node, ast.Assign) and any(
+                isinstance(target, ast.Name) and target.id == "__all__" for target in node.targets
+            ):
+                handed_on.update(ast.literal_eval(node.value))
+    assert {"Read", "Readable", "READS", "BUNDLE"} <= handed_on
+    whole, stamp = read_artefact(root)
+    first = min(typing.cast("dict[str, object]", whole["kinds"]))
+    for name in sorted(handed_on):
+        taking = copy.deepcopy(whole)
+        carrier = typing.cast("dict[str, dict[str, dict[str, object]]]", taking["kinds"])[first]
+        carrier.setdefault("$defs", {})[name] = CODE
+        with pytest.raises(ArtefactRefusedError) as refused:
+            generate(taking, stamp)
+        said = str(refused.value)
+        assert f"`{name}`, defined by `{first}`, takes a name this generator writes itself" in said
 
 
 def test_one_name_for_two_shapes_is_refused() -> None:

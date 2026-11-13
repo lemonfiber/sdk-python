@@ -77,6 +77,11 @@ OWNED = {
     "KeyCallable": "what the contract says of one action a key may call",
     "KEY_CALLABLE": "what the contract says of each action a key may call",
     "is_key_callable": "whether an action is one a key may call",
+    "API": "what every read's path begins with",
+    "Read": "a read answering with one envelope, named for its path",
+    "ReadParameter": "one query parameter a read takes",
+    "Readable": "what the contract says of one read",
+    "READS": "what the contract says of each read answering with one envelope",
 }
 """Names this generator writes itself, and what each one means here."""
 

@@ -29,7 +29,7 @@ requirement = [
   { id = "ARCH-R78", state = "partial", evidence = ["src/lemonfiber/capabilities.py", "tests/test_clients.py::test_what_a_stack_can_do_is_read_for_the_credential_that_asked"] },
   { id = "ARCH-R81", state = "done", evidence = ["src/lemonfiber/capabilities.py", "tests/test_clients.py::/api/something-newer"] },
   { id = "ARCH-R99", state = "done", evidence = ["src/lemonfiber/address.py", "tests/test_trust.py::test_another_certificate_is_refused_before_anything_is_sent"] },
-  { id = "ARCH-R129", state = "partial", evidence = ["scripts/contract_generator/shapes.py", "tests/test_generator.py::test_a_definition_taking_a_name_the_generator_writes_is_refused_naming_it_and_its_kind"] },
+  { id = "ARCH-R129", state = "done", evidence = ["scripts/contract_generator/writer.py", "scripts/contract_generator/__init__.py", "tests/test_generator.py::test_a_definition_taking_a_name_the_generator_writes_is_refused_naming_it_and_its_kind", "tests/test_generator.py::test_a_definition_taking_a_name_a_table_hands_on_is_refused_naming_it_and_its_kind"] },
   { id = "ARCH-R138", state = "partial", evidence = ["src/lemonfiber/problems.py", "tests/test_clients.py::test_a_refusal_is_read_by_its_status_carrying_its_code_and_sentence"] },
   { id = "ARCH-R139", state = "partial", evidence = ["scripts/contract_generator/refused.py", "tests/test_generator.py::test_listed_refusals_are_generated_with_what_the_contract_says_of_each"] },
   { id = "ARCH-R170", state = "done", evidence = ["scripts/contract_generator/writer.py", "tests/test_generator.py::test_a_reference_to_no_definition_is_refused_naming_it_and_where_it_sits_and_nothing_is_written"] },
