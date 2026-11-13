@@ -402,6 +402,30 @@ def test_a_found_title_nobody_may_ask_for_or_with_no_poster_is_missing_with_its_
     assert refused.value.code == code
 
 
+def test_a_kept_asks_cover_is_read_by_its_reference(client: Driver, stack: Stack) -> None:
+    stack.reply(
+        "GET",
+        "/api/requests/music-3/poster",
+        Reply(body=A_PICTURE, headers={"Content-Type": "image/png"}),
+    )
+    cover = client.request_poster("music-3", {"member": "ana"})
+    assert (cover.content, cover.media_type) == (A_PICTURE, "image/png")
+    assert stack.arrived[0].query == [("member", "ana")]
+    assert stack.arrived[0].headers["Accept"] == "image/jpeg, image/png, image/webp, image/gif, image/avif"
+
+
+@pytest.mark.parametrize("code", ["WISH-3", "WISH-13"])
+def test_a_kept_ask_nobody_may_read_or_with_no_cover_is_missing_with_its_code(
+    client: Driver,
+    stack: Stack,
+    code: str,
+) -> None:
+    stack.reply("GET", "/api/requests/music-3/poster", Reply(404, problem(code, "There is nothing to show.")))
+    with pytest.raises(MissingError) as refused:
+        client.request_poster("music-3", {"member": "ana"})
+    assert refused.value.code == code
+
+
 @pytest.mark.parametrize("label", ["image/svg+xml", "text/html", "image/pngx"])
 def test_an_answer_that_is_not_a_raster_picture_is_refused(client: Driver, stack: Stack, label: str) -> None:
     stack.reply("GET", "/api/held/81/poster", Reply(body=A_PICTURE, headers={"Content-Type": label}))

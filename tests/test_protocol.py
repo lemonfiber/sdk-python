@@ -24,7 +24,7 @@ from lemonfiber.problems import (
     UnreachableError,
     UnreadableResponseError,
 )
-from lemonfiber.reads import HELD_ID_BACKDROP, HELD_ID_POSTER
+from lemonfiber.reads import HELD_ID_BACKDROP, HELD_ID_POSTER, REQUESTS_REFERENCE_POSTER
 
 JSON = {"Accept": "application/json"}
 SENT = {"Accept": "application/json", "Content-Type": "application/json"}
@@ -63,9 +63,15 @@ def test_each_call_is_the_request_it_names() -> None:
         "/api/bundle/a%2Fb%20c",
         {"Accept": "*/*"},
     )
-    assert calls.picture_call(HELD_ID_BACKDROP, "a/b c", {"member": "ada"}) == calls.Call(
+    assert calls.picture_call(HELD_ID_BACKDROP, calls.TITLE, "a/b c", {"member": "ada"}) == calls.Call(
         HTTPMethod.GET,
         "/api/held/a%2Fb%20c/backdrop?member=ada",
+        {"Accept": "image/jpeg, image/png, image/webp, image/gif, image/avif"},
+        most=PICTURE_MOST,
+    )
+    assert calls.picture_call(REQUESTS_REFERENCE_POSTER, calls.REFERENCE, "music/3", None) == calls.Call(
+        HTTPMethod.GET,
+        "/api/requests/music%2F3/poster",
         {"Accept": "image/jpeg, image/png, image/webp, image/gif, image/avif"},
         most=PICTURE_MOST,
     )
@@ -98,8 +104,9 @@ def test_each_operation_pairs_its_call_with_the_reading_of_its_answer() -> None:
     assert operation.capabilities().call == calls.capabilities_call()
     assert operation.logs(["x"], ["tv"], 3).call == calls.logs_call(["x"], ["tv"], 3)
     assert operation.bundle("b").call == calls.bundle_call("b")
-    assert operation.picture(HELD_ID_POSTER, "t", {"member": "ada"}).call == calls.picture_call(
+    assert operation.picture(HELD_ID_POSTER, calls.TITLE, "t", {"member": "ada"}).call == calls.picture_call(
         HELD_ID_POSTER,
+        calls.TITLE,
         "t",
         {"member": "ada"},
     )
@@ -208,7 +215,7 @@ def test_a_body_streamed_whose_headers_declare_too_much_is_not_read() -> None:
 
 
 def test_a_picture_is_a_read_and_asked_again_after_a_passing_failure() -> None:
-    assert operation.picture(HELD_ID_POSTER, "t", None).again is True
+    assert operation.picture(HELD_ID_POSTER, calls.TITLE, "t", None).again is True
 
 
 def test_a_picture_with_no_label_is_refused_as_one() -> None:
@@ -229,7 +236,10 @@ def test_a_picture_refused_is_the_refusal_it_is() -> None:
 def test_the_credential_is_added_to_a_calls_headers_alone() -> None:
     call = calls.with_credential(calls.read_call(Read.STATUS, None), Credential("abc"))
     assert call == calls.Call(HTTPMethod.GET, "/api/status", {**JSON, "X-Lemonfiber-Token": "abc"})
-    capped = calls.with_credential(calls.picture_call(HELD_ID_POSTER, "t", None), Credential("abc"))
+    capped = calls.with_credential(
+        calls.picture_call(HELD_ID_POSTER, calls.TITLE, "t", None),
+        Credential("abc"),
+    )
     assert capped.most == PICTURE_MOST
 
 

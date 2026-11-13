@@ -150,6 +150,10 @@ class Driver(Protocol):
         """Fetch a found title's poster."""
         ...
 
+    def request_poster(self, reference: str, query: Query | None = None) -> Picture:
+        """Fetch a kept ask's cover."""
+        ...
+
     def act(self, action: str, arguments: Mapping[str, Json] | None = None) -> Envelope:
         """Act."""
         ...
@@ -255,6 +259,10 @@ class SyncDriver:
     def askable_poster(self, title: str, query: Query | None = None) -> Picture:
         """Fetch a found title's poster."""
         return self.client.askable_poster(title, query)
+
+    def request_poster(self, reference: str, query: Query | None = None) -> Picture:
+        """Fetch a kept ask's cover."""
+        return self.client.request_poster(reference, query)
 
     def act(self, action: str, arguments: Mapping[str, Json] | None = None) -> Envelope:
         """Act."""
@@ -374,6 +382,10 @@ class AsyncDriver:
     def askable_poster(self, title: str, query: Query | None = None) -> Picture:
         """Fetch a found title's poster."""
         return self.run(self.client.askable_poster(title, query))
+
+    def request_poster(self, reference: str, query: Query | None = None) -> Picture:
+        """Fetch a kept ask's cover."""
+        return self.run(self.client.request_poster(reference, query))
 
     def act(self, action: str, arguments: Mapping[str, Json] | None = None) -> Envelope:
         """Act."""
