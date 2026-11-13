@@ -159,7 +159,8 @@ limit, and none of an answer that states a longer length. A title outside the me
 A member searches for a title to ask for with `Read.ASKABLE`, which takes
 `member`, `term` and `after`, and asks for one with the `ask` action.
 `askable_poster` answers with a found title's poster as a `Picture`, read by
-the id the search lists it under, and takes `member` and `kind`:
+the id the search lists it under, and takes `member`, `kind` and, for music or
+books, `unit`:
 
 ```python
 found = expect(client.read(Read.ASKABLE, {"member": "ada", "term": "dune"}), "askable")
@@ -171,7 +172,17 @@ client.act("ask", {"name": "ada", "id": title["id"], "kind": title["kind"]})
 A title the member may not ask for raises `MissingError` with `WISH-3`, and one
 with no poster raises `MissingError` with `WISH-13`.
 
-A read (`read`, `capabilities`, `logs`, `bundle`, `poster`, `backdrop`, `askable_poster` and `job`) is asked twice more
+`request_poster` answers with the cover of an ask for music or books the core
+keeps, read by the reference the household list names it by (`music-3`), and
+takes `member`. A reference no kept ask goes by, or one another member made,
+raises `MissingError` with `WISH-3`, and an ask with no cover raises
+`MissingError` with `WISH-13`.
+
+```python
+cover = client.request_poster("music-3", {"member": "ada"})
+```
+
+A read (`read`, `capabilities`, `logs`, `bundle`, `poster`, `backdrop`, `askable_poster`, `request_poster` and `job`) is asked twice more
 where nothing answered or a gateway in front of the stack answered 502, 503 or
 504, a quarter of a second later and then half a second, every attempt within
 the client's `timeout`.
