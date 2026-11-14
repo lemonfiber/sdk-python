@@ -78,6 +78,7 @@ from .kinds import (
     SeedEnvelope,
     SelfUpdateEnvelope,
     SettingsEnvelope,
+    SettledEnvelope,
     SetupEnvelope,
     SpaceEnvelope,
     StackEnvelope,
@@ -178,6 +179,7 @@ type Kind = typing.Literal[
     "seed",
     "self-update",
     "settings",
+    "settled",
     "setup",
     "space",
     "stack",
@@ -279,6 +281,7 @@ type Envelope = (
     | SeedEnvelope
     | SelfUpdateEnvelope
     | SettingsEnvelope
+    | SettledEnvelope
     | SetupEnvelope
     | SpaceEnvelope
     | StackEnvelope
