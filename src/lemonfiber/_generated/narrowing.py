@@ -33,6 +33,7 @@ from .kinds import (
     DeviceKeyEnvelope,
     DeviceKeysEnvelope,
     DoctorEnvelope,
+    EndedEnvelope,
     ErrorEnvelope,
     FormsEnvelope,
     FrontDoorEnvelope,
@@ -162,6 +163,8 @@ class KindNarrowing(typing.Protocol):
     def __call__(self, envelope: Envelope, kind: typing.Literal["device-keys"], /) -> DeviceKeysEnvelope: ...
     @typing.overload
     def __call__(self, envelope: Envelope, kind: typing.Literal["doctor"], /) -> DoctorEnvelope: ...
+    @typing.overload
+    def __call__(self, envelope: Envelope, kind: typing.Literal["ended"], /) -> EndedEnvelope: ...
     @typing.overload
     def __call__(self, envelope: Envelope, kind: typing.Literal["error"], /) -> ErrorEnvelope: ...
     @typing.overload

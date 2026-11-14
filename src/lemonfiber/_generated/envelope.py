@@ -32,6 +32,7 @@ from .kinds import (
     DeviceKeyEnvelope,
     DeviceKeysEnvelope,
     DoctorEnvelope,
+    EndedEnvelope,
     ErrorEnvelope,
     FormsEnvelope,
     FrontDoorEnvelope,
@@ -131,6 +132,7 @@ type Kind = typing.Literal[
     "device-key",
     "device-keys",
     "doctor",
+    "ended",
     "error",
     "forms",
     "front-door",
@@ -231,6 +233,7 @@ type Envelope = (
     | DeviceKeyEnvelope
     | DeviceKeysEnvelope
     | DoctorEnvelope
+    | EndedEnvelope
     | ErrorEnvelope
     | FormsEnvelope
     | FrontDoorEnvelope

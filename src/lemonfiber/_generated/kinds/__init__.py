@@ -29,6 +29,7 @@ from . import device_challenge as _device_challenge
 from . import device_key as _device_key
 from . import device_keys as _device_keys
 from . import doctor as _doctor
+from . import ended as _ended
 from . import error as _error
 from . import forms as _forms
 from . import front_door as _front_door
@@ -123,6 +124,7 @@ from .device_challenge import *
 from .device_key import *
 from .device_keys import *
 from .doctor import *
+from .ended import *
 from .error import *
 from .forms import *
 from .front_door import *
@@ -218,6 +220,7 @@ __all__ += _device_challenge.__all__
 __all__ += _device_key.__all__
 __all__ += _device_keys.__all__
 __all__ += _doctor.__all__
+__all__ += _ended.__all__
 __all__ += _error.__all__
 __all__ += _forms.__all__
 __all__ += _front_door.__all__
