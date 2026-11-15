@@ -37,7 +37,7 @@ REGISTERED = {
     "name": "pixel",
     "fingerprint": "ab" * 32,
     "backing": "strongbox",
-    "registered": "2026-10-13T00:00:00Z",
+    "registered": 1_791_849_600,
 }
 LISTED: dict[str, object] = {"keys": [], "rehearsed": False}
 ONE_PROOF = "A mint is proved by the password or by a device key's signature, exactly one of the two."

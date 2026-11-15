@@ -79,7 +79,7 @@ CLAIMED = {
     "scope": "read",
     "purpose": "home-assistant",
     "link": "lemonfiber://key?claim=withheld",
-    "lapses": "2026-10-11T14:10:00",
+    "lapses": 1_791_727_800,
 }
 
 

@@ -645,7 +645,7 @@ def test_a_base_path_is_kept_in_front_of_every_path(flavour: Flavour, stack: Sta
     driver.close()
 
 
-ADMITTED = envelope("admission", {"token": "session-secret", "until": "2026-10-05T12:00:00Z"})
+ADMITTED = envelope("admission", {"token": "session-secret", "until": 1_791_201_600})
 
 
 def test_a_password_is_exchanged_once_for_a_session(flavour: Flavour, stack: Stack) -> None:
@@ -664,11 +664,11 @@ def test_a_password_is_exchanged_once_for_a_session(flavour: Flavour, stack: Sta
 
 
 def test_a_member_names_themself_at_the_door(flavour: Flavour, stack: Stack) -> None:
-    member = envelope("admission", {"token": "s", "until": "2026-10-05T12:00:00.250", "member": "ana"})
+    member = envelope("admission", {"token": "s", "until": 1_791_201_601, "member": "ana"})
     stack.reply("POST", "/api/session", Reply(body=member))
     session = admitted(flavour, Address(stack.url), "pw", "ana")
     assert session.member == "ana"
-    assert session.until == dt.datetime(2026, 10, 5, 12, 0, 0, 250000, tzinfo=dt.UTC)
+    assert session.until == dt.datetime(2026, 10, 5, 12, 0, 1, tzinfo=dt.UTC)
     assert stack.arrived[0].body == b'{"name": "ana", "password": "pw"}'
 
 
@@ -700,23 +700,24 @@ def test_too_many_wrong_passwords_say_how_long_is_left(flavour: Flavour, stack: 
     assert refused.value.retry_after == 30
 
 
-@pytest.mark.parametrize("until", ["tomorrow", "2026-10-05T12:00:00+02:00"])
-def test_a_session_whose_ending_cannot_be_read_is_refused(flavour: Flavour, stack: Stack, until: str) -> None:
+@pytest.mark.parametrize("until", ["2026-10-05T12:00:00Z", 1.5, -1, True, 10**20])
+def test_a_session_whose_ending_cannot_be_read_is_refused(
+    flavour: Flavour,
+    stack: Stack,
+    until: object,
+) -> None:
     stack.reply("POST", "/api/session", Reply(body=envelope("admission", {"token": "s", "until": until})))
     address = Address(stack.url)
     with pytest.raises(UnreadableResponseError) as refused:
         admitted(flavour, address, "pw")
-    reason = "is not an instant" if until == "tomorrow" else "names an offset other than UTC"
-    assert refused.value.what == f"{until!r} {reason}"
+    assert refused.value.what == f"{until!r} is not an instant"
 
 
-def test_a_session_with_an_offset_of_nothing_is_utc(flavour: Flavour, stack: Stack) -> None:
-    stack.reply(
-        "POST",
-        "/api/session",
-        Reply(body=envelope("admission", {"token": "s", "until": "2026-10-05T12:00:00+00:00"})),
-    )
-    assert admitted(flavour, Address(stack.url), "pw").until.tzinfo is dt.UTC
+def test_a_session_ending_at_the_epoch_ends_then_in_utc(flavour: Flavour, stack: Stack) -> None:
+    stack.reply("POST", "/api/session", Reply(body=envelope("admission", {"token": "s", "until": 0})))
+    until = admitted(flavour, Address(stack.url), "pw").until
+    assert until == dt.datetime(1970, 1, 1, tzinfo=dt.UTC)
+    assert until.tzinfo is dt.UTC
 
 
 def test_a_door_slower_than_the_timeout_is_unreachable(stack: Stack) -> None:

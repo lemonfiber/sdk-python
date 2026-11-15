@@ -331,7 +331,7 @@ def test_the_door_is_held_to_the_pin_too(flavour: Flavour, tls_stack: Stack) -> 
     tls_stack.reply(
         "POST",
         "/api/session",
-        Reply(body=envelope("admission", {"token": "s", "until": "2026-10-05T12:00:00"})),
+        Reply(body=envelope("admission", {"token": "s", "until": 1_791_201_600})),
     )
     mispinned = Address(tls_stack.url, pin=OTHER_PIN)
     with pytest.raises(CertificateRefusedError):
@@ -488,7 +488,7 @@ def test_the_door_takes_a_callers_session(stack: Stack) -> None:
     stack.reply(
         "POST",
         "/api/session",
-        Reply(body=envelope("admission", {"token": "s", "until": "2026-10-05T12:00:00"})),
+        Reply(body=envelope("admission", {"token": "s", "until": 1_791_201_600})),
     )
 
     async def knock() -> str | None:
@@ -580,7 +580,7 @@ def test_the_door_on_a_callers_session_is_held_to_the_pin(tls_stack: Stack) -> N
     tls_stack.reply(
         "POST",
         "/api/session",
-        Reply(body=envelope("admission", {"token": "s", "until": "2026-10-05T12:00:00"})),
+        Reply(body=envelope("admission", {"token": "s", "until": 1_791_201_600})),
     )
 
     async def knock() -> str | None:
