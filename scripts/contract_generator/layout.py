@@ -41,26 +41,37 @@ def carried(carriers: frozenset[str]) -> str:
     return f"{ticked(carriers)} {'both' if len(carriers) == BOTH else 'all'} carry"
 
 
-def path_of(carriers: frozenset[str]) -> Path:
-    """Return the module the shapes some kinds carry are written in."""
+def path_of(carriers: frozenset[str], first: str) -> Path:
+    """Return the module the shapes some kinds carry are written in, named after `first` where more than one does."""
     if len(carriers) == 1:
         return (*KINDS_PACKAGE, module_name(next(iter(carriers))))
-    return (*SHARED_PACKAGE, "__".join(module_name(kind) for kind in sorted(carriers)))
+    return (*SHARED_PACKAGE, module_name(first))
 
 
 def grouped(shapes: Mapping[str, Shape]) -> dict[Path, dict[str, Shape]]:
-    """Return every shape by the module it is written in, refusing two sets of kinds written as one module."""
+    """Return every shape by the module it is written in: one module per set of kinds.
+
+    Where two sets' shared modules would take one name, the set later in the
+    order of its sorted kinds takes that name followed by two underscores and the
+    next number from 2. Two kinds never meet here under one name: their envelopes
+    would already share one, which is refused before.
+    """
+    sets: dict[tuple[str, ...], dict[str, Shape]] = {}
+    for name in sorted(shapes):
+        sets.setdefault(tuple(sorted(shapes[name].carriers)), {})[name] = shapes[name]
     groups: dict[Path, dict[str, Shape]] = {}
     held: dict[Path, frozenset[str]] = {}
-    for name in sorted(shapes):
-        shape = shapes[name]
-        path = path_of(shape.carriers)
-        if held.setdefault(path, shape.carriers) != shape.carriers:
-            refuse(
-                f"the shapes {carried(held[path])} and those {carried(shape.carriers)} would both be "
-                f"written as `{'.'.join(path)}`",
-            )
-        groups.setdefault(path, {})[name] = shape
+    for kinds in sorted(sets):
+        members = sets[kinds]
+        carriers = frozenset(kinds)
+        named = path_of(carriers, next(iter(members)))
+        path = named
+        number = 2
+        while path in held:
+            path = (*named[:-1], f"{named[-1]}__{number}")
+            number += 1
+        held[path] = carriers
+        groups[path] = members
     return groups
 
 

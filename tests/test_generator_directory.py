@@ -61,7 +61,7 @@ def test_a_directory_writes_the_files_its_single_file_writes(tmp_path: pathlib.P
     assert run(single) == 0
     assert run(split) == 0
     assert generated_files(split) == generated_files(single)
-    assert "type Code = str" in source(split, "shared", "error__word.py")
+    assert "type Code = str" in source(split, "shared", "code.py")
 
 
 def test_a_list_in_a_file_for_each_part_is_gathered_into_the_one_list_a_single_file_holds(

@@ -44,9 +44,9 @@ def test_a_kinds_own_shapes_are_its_module_and_shared_ones_a_module_of_their_car
     own = source(tmp_path, "kinds", "a.py")
     assert "class AEnvelope(typing.TypedDict):" in own
     assert "class Own(typing.TypedDict):" in own
-    assert "from ..shared.a__b import Shared" in own
-    assert "class Shared(typing.TypedDict):" in source(tmp_path, "shared", "a__b.py")
-    assert '"""The shapes `a` and `b` both carry.' in source(tmp_path, "shared", "a__b.py")
+    assert "from ..shared.code import Shared" in own
+    assert "class Shared(typing.TypedDict):" in source(tmp_path, "shared", "code.py")
+    assert '"""The shapes `a` and `b` both carry.' in source(tmp_path, "shared", "code.py")
     assert module.AEnvelope.__annotations__["data"] is module.Shared
     assert {"AEnvelope", "BEnvelope", "Code", "Own", "Shared"} <= set(module.__all__)
 
@@ -56,7 +56,7 @@ def test_a_module_spelling_nothing_through_typing_does_not_import_it(tmp_path: p
         tmp_path,
         artefact({one: kind({"$ref": "#/$defs/Code"}, {"Code": CODE}) for one in ("a", "b", "c")}),
     )
-    shared = source(tmp_path, "shared", "a__b__c.py")
+    shared = source(tmp_path, "shared", "code.py")
     assert "import typing" not in shared
     assert '"""The shapes `a`, `b` and `c` all carry.' in shared
     assert module.Code.__value__ is str
@@ -133,18 +133,37 @@ def test_a_shape_naming_one_some_of_its_carriers_lack_is_refused() -> None:
     assert said == "`Shared`, which `a` and `b` both carry, names `Code`, which `b` does not define"
 
 
-def test_two_sets_of_kinds_written_as_one_module_are_refused() -> None:
-    said = refusal(
+def test_a_shape_forty_kinds_carry_is_one_module_named_after_it(tmp_path: pathlib.Path) -> None:
+    many = [f"kind-with-a-long-name-{at:02}" for at in range(40)]
+    module = generated(
+        tmp_path,
+        artefact({one: kind({"$ref": "#/$defs/Code"}, {"Code": CODE}) for one in many}),
+    )
+    assert sorted(
+        path.name for path in (tmp_path / "src" / "lemonfiber" / "_generated" / "shared").glob("*.py")
+    ) == [
+        "__init__.py",
+        "code.py",
+    ]
+    assert module.Code.__value__ is str
+
+
+def test_a_set_of_kinds_whose_first_shape_takes_a_name_already_taken_is_numbered(
+    tmp_path: pathlib.Path,
+) -> None:
+    generated(
+        tmp_path,
         artefact(
             {
-                "a": kind({"$ref": "#/$defs/Left"}, {"Left": CODE}),
-                "b__c": kind({"$ref": "#/$defs/Left"}, {"Left": CODE}),
-                "a__b": kind({"$ref": "#/$defs/Right"}, {"Right": CODE}),
-                "c": kind({"$ref": "#/$defs/Right"}, {"Right": CODE}),
+                "a": kind({"$ref": "#/$defs/Code"}, {"Code": CODE}),
+                "b": kind({"$ref": "#/$defs/Code"}, {"Code": CODE}),
+                "c": kind({"$ref": "#/$defs/CODE"}, {"CODE": CODE}),
+                "d": kind({"$ref": "#/$defs/CODE"}, {"CODE": CODE}),
             },
         ),
     )
-    assert said.endswith("would both be written as `shared.a__b__c`")
+    assert '"""The shapes `a` and `b` both carry.' in source(tmp_path, "shared", "code.py")
+    assert '"""The shapes `c` and `d` both carry.' in source(tmp_path, "shared", "code__2.py")
 
 
 def test_two_parts_written_under_one_name_are_refused() -> None:
