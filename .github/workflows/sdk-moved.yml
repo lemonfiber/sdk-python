@@ -24,7 +24,7 @@ jobs:
   tell:
     permissions:
       contents: read
-    uses: lemonfiber/spec/.github/workflows/tell.yml@802aa24222531a84a0d035d3d855db271936b507 # v1.0.159
+    uses: lemonfiber/spec/.github/workflows/tell.yml@d5edfb9b4e961857c8e2b9212413907ad086aba6 # v1.0.160
     with:
       repos: integration-home-assistant
       workflow: sdk-bump.yml
