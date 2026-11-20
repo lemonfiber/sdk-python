@@ -110,6 +110,7 @@ minimum-score = 100
 accepted = [
   { symbol = "lemonfiber._generated.kinds.upgrade.UpgradeMedia.size_per_hour", kind = "object-removed", reason = "The contract at 090ff8b8 no longer holds it as it was." },
   { symbol = "lemonfiber._generated.kinds.log.LogLine.at", kind = "object-removed", reason = "The contract at fc07885a no longer holds it as it was." },
+  { symbol = "lemonfiber._generated.kinds.served.ServedReport.fingerprint", kind = "object-removed", reason = "The contract at f50f13a5 no longer holds it as it was." },
 ]
 
 [tool.lemonfiber.line-cap]
