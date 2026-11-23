@@ -25,6 +25,11 @@ def test_the_spoken_version_is_the_contracts() -> None:
     assert SPOKEN_API_VERSION == CONTRACT_API_VERSION
 
 
+def test_an_envelope_hands_on_every_field_beside_its_data() -> None:
+    said = {**STATUS, "host": "nas", "job": "5c63"}
+    assert read_envelope(dict(said)) == said
+
+
 def test_an_envelope_is_read_as_it_arrived() -> None:
     envelope = read_envelope(dict(STATUS))
     assert envelope == STATUS
