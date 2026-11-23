@@ -1,6 +1,7 @@
 # Copyright (c) 2026 NightWorksIO
 """The generated shapes say what the vendored artefact says, and nothing of their own."""
 
+import typing
 from typing import Any, cast
 
 import lemonfiber
@@ -57,3 +58,15 @@ def test_the_contract_module_hands_on_every_generated_shape() -> None:
     for name in generated.__all__:
         assert getattr(contract, name) is getattr(generated, name)
     assert "StatusEnvelope" in generated.__all__
+
+
+def test_every_envelope_declares_every_top_level_property_its_kind_does() -> None:
+    declared = {kind: set(schema["properties"]) for kind, schema in ARTEFACT["kinds"].items()}
+    typed = {
+        typing.get_args(typing.get_type_hints(shape)["kind"])[0]: shape.__required_keys__
+        | shape.__optional_keys__
+        for shape in typing.get_args(generated.Envelope.__value__)
+    }
+    assert set(typed) == set(declared)
+    for kind, properties in declared.items():
+        assert properties <= typed[kind], f"{kind} declares {sorted(properties - typed[kind])}"
