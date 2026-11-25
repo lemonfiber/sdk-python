@@ -86,6 +86,30 @@ OWNED = {
 """Names this generator writes itself, and what each one means here."""
 
 
+def joined(node: dict[str, object], origin: str) -> dict[str, object]:
+    """Return a schema holding fields beside a oneOf or anyOf as the union of each branch with them."""
+    combinator = next((one for one in ("oneOf", "anyOf") if one in node), None)
+    fields = object_of(node.get("properties"))
+    if combinator is None or fields is None:
+        return node
+    needed = as_list(node.get("required", []))
+    rest = {key: value for key, value in node.items() if key not in {"properties", "required", combinator}}
+    branches: list[object] = []
+    for at, branch in enumerate(as_list(node[combinator])):
+        own = object_of(branch)
+        if own is None or "$ref" in own:
+            refuse(f"{origin} {combinator}/{at} is a branch the fields beside it cannot join")
+        branches.append(
+            {
+                **own,
+                "type": "object",
+                "properties": {**fields, **(object_of(own.get("properties")) or {})},
+                "required": [*needed, *as_list(own.get("required", []))],
+            },
+        )
+    return {**rest, combinator: branches}
+
+
 @dataclass
 class Writer:
     """Turns the artefact's schemas into Python declarations."""
@@ -164,7 +188,7 @@ class Writer:
         unread = sorted(set(node) - UNDERSTOOD)
         if unread:
             refuse(f"{origin} uses {', '.join(unread)}, which this generator does not read")
-        return node
+        return joined(node, origin)
 
     @staticmethod
     def types_of(node: Mapping[str, object]) -> list[str]:

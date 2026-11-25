@@ -109,6 +109,8 @@ minimum-score = 100
 # marked breaking; every other break fails.
 accepted = [
   { symbol = "lemonfiber._generated.kinds.served.ServedReport.fingerprint", kind = "object-removed", reason = "The contract at f50f13a5 holds the fingerprint inside `certificate`, beside what else the certificate says about itself." },
+  { symbol = "lemonfiber._generated.kinds.plugin_provenance.Based", kind = "object-changed-kind", reason = "Based holds its image and release beside a basis, recorded, unproven or refused; it is the union of those three, each carrying the fields beside it, where the class carried the fields and dropped the branches." },
+  { symbol = "lemonfiber._generated.kinds.plugin_provenance.Vouch", kind = "object-changed-kind", reason = "Vouch holds its digest, image and service beside a provenance, signed, unproven or refused; it is the union of those three, each carrying the fields beside it, where the class carried the fields and dropped the branches." },
 ]
 
 [tool.lemonfiber.line-cap]
