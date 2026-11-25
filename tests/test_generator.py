@@ -93,6 +93,43 @@ def test_a_tagged_union_names_each_variant_for_its_tag(tmp_path: pathlib.Path) -
     assert 'type Scope = ScopeWholeStack | ScopeService\n"""How much a backup covers."""' in written
 
 
+def test_the_fields_beside_a_union_join_every_branch_of_it(tmp_path: pathlib.Path) -> None:
+    running = {
+        "type": "object",
+        "properties": {"part": {"type": "string"}, "job": {"type": "string"}},
+        "required": ["part"],
+        "oneOf": [
+            {"type": "object", "properties": {"state": {"const": "working"}}, "required": ["state"]},
+            {
+                "type": "object",
+                "properties": {"state": {"const": "paced"}, "limit": {"type": "integer"}},
+                "required": ["state", "limit"],
+            },
+        ],
+    }
+    module = generated(
+        tmp_path,
+        artefact({"copying": kind({"$ref": "#/$defs/Running"}, {"Running": running})}),
+    )
+    assert keys(module, "RunningWorking") == ({"part", "state"}, {"job"})
+    assert keys(module, "RunningPaced") == ({"part", "state", "limit"}, {"job"})
+    assert "type Running = RunningWorking | RunningPaced" in source(tmp_path, "kinds", "copying.py")
+
+
+@pytest.mark.parametrize(
+    ("branch", "said"),
+    [
+        ({"$ref": "#/$defs/Code"}, "oneOf/0 is a branch the fields beside it cannot join"),
+        ("working", "oneOf/0 is a branch the fields beside it cannot join"),
+    ],
+)
+def test_fields_beside_a_branch_they_cannot_join_are_refused(branch: object, said: str) -> None:
+    beside = {"type": "object", "properties": {"part": {"type": "string"}}, "oneOf": [branch]}
+    assert said in refusal(
+        artefact({"copying": kind({"$ref": "#/$defs/Running"}, {"Running": beside, "Code": CODE})}),
+    )
+
+
 def test_untagged_variants_are_named_for_their_place(tmp_path: pathlib.Path) -> None:
     either = {
         "oneOf": [
