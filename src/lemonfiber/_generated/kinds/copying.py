@@ -60,8 +60,34 @@ class CopyingReport(typing.TypedDict):
     """The copy running now, or none."""
 
 
-class RunningCopy(typing.TypedDict):
-    """A backup or restore running now."""
+type RunningCopy = RunningCopyWorking | RunningCopyPaced | RunningCopyStalled
+"""A backup or restore running now."""
+
+
+class RunningCopyPaced(typing.TypedDict):
+    """Held to the operator's limit."""
+
+    job: typing.NotRequired[str | None]
+    """The name an accepting reply gave the work, where one did."""
+    limit: int
+    """The limit, in bytes a second."""
+    part: str
+    """The area being written now, named."""
+    scope: CopiedScope
+    """What it copies."""
+    started: Instant
+    """When it started."""
+    state: typing.Literal["paced"]
+    what: CopyWhat
+    """Whether it is a backup or a restore."""
+    whole: int
+    """The bytes it will write."""
+    written: int
+    """The bytes written so far."""
+
+
+class RunningCopyStalled(typing.TypedDict):
+    """Nothing written for the minutes the operator's setting holds."""
 
     job: typing.NotRequired[str | None]
     """The name an accepting reply gave the work, where one did."""
@@ -71,6 +97,29 @@ class RunningCopy(typing.TypedDict):
     """What it copies."""
     started: Instant
     """When it started."""
+    state: typing.Literal["stalled"]
+    what: CopyWhat
+    """Whether it is a backup or a restore."""
+    whole: int
+    """The bytes it will write."""
+    written: int
+    """The bytes written so far."""
+    wrote: Instant
+    """The instant it last wrote."""
+
+
+class RunningCopyWorking(typing.TypedDict):
+    """Writing as fast as it can."""
+
+    job: typing.NotRequired[str | None]
+    """The name an accepting reply gave the work, where one did."""
+    part: str
+    """The area being written now, named."""
+    scope: CopiedScope
+    """What it copies."""
+    started: Instant
+    """When it started."""
+    state: typing.Literal["working"]
     what: CopyWhat
     """Whether it is a backup or a restore."""
     whole: int
@@ -88,4 +137,7 @@ __all__ = [
     "CopyingEnvelope",
     "CopyingReport",
     "RunningCopy",
+    "RunningCopyPaced",
+    "RunningCopyStalled",
+    "RunningCopyWorking",
 ]
