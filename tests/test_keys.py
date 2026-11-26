@@ -194,6 +194,23 @@ def test_the_keys_are_listed_from_their_own_door_with_the_credential(client: Dri
     assert stack.arrived[0].headers[CREDENTIAL_HEADER] == PRINTED
 
 
+def test_a_listed_key_names_the_device_key_that_proved_its_mint_and_none_where_the_password_did(
+    client: Driver,
+    stack: Stack,
+) -> None:
+    home = {
+        "name": "home",
+        "scope": "read",
+        "purpose": "home-assistant",
+        "state": "active",
+        "minted": EARLIER,
+        "member_minted": False,
+    }
+    listing = {**LISTING, "keys": [{**home, "name": "phone", "proved_by": "pixel"}, home]}
+    stack.reply("GET", "/api/keys", Reply(body=envelope("keys", listing)))
+    assert [key.get("proved_by") for key in client.keys()["data"]["keys"]] == ["pixel", None]
+
+
 def test_a_key_is_minted_once_with_the_password_in_the_body(client: Driver, stack: Stack) -> None:
     stack.reply("POST", "/api/keys", Reply(body=envelope("minted-key", MINTED)))
     assert client.mint(MINTING) == envelope("minted-key", MINTED)
