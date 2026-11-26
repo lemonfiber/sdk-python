@@ -15,6 +15,7 @@ import shutil
 import sys
 from typing import TYPE_CHECKING
 
+from scripts.contract_generator.actions import actions_module, actions_of
 from scripts.contract_generator.artefact import (
     as_map,
     checked,
@@ -68,6 +69,7 @@ def generate(
     kinds = kinds_of(artefact)
     refusals = refusals_of(artefact)
     callable_by_key = key_callable_of(artefact)
+    actions = actions_of(artefact)
     reads = reads_of(artefact)
 
     writer = Writer(users=users_of(kinds))
@@ -75,6 +77,7 @@ def generate(
     for kind in names:
         writer.owned[f"{pascal(kind)}Envelope"] = f"the envelope carrying `{kind}`"
     tables = [
+        actions_module(actions),
         envelope_module(names),
         narrowing_module(names),
         key_callable_module(callable_by_key),
@@ -102,7 +105,15 @@ def generate(
             index(KINDS_PACKAGE, "Every kind's envelope, and the shapes only that kind carries.", kind_paths),
         ],
     )
-    members = [("envelope",), ("key_callable",), KINDS_PACKAGE, ("narrowing",), ("reads",), REFUSALS_PACKAGE]
+    members = [
+        ("actions",),
+        ("envelope",),
+        ("key_callable",),
+        KINDS_PACKAGE,
+        ("narrowing",),
+        ("reads",),
+        REFUSALS_PACKAGE,
+    ]
     if shared_paths:
         modules.append(index(SHARED_PACKAGE, "Every shape more than one kind carries.", shared_paths))
         members.append(SHARED_PACKAGE)
