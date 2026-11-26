@@ -31,6 +31,7 @@ from scripts.contract_generator.modules import OUT, Module, index
 from scripts.contract_generator.refused import ArtefactRefusedError, refuse
 from scripts.contract_generator.spelling import pascal
 from scripts.contract_generator.tables import (
+    BODIES_PACKAGE,
     KINDS_PACKAGE,
     REFUSALS_PACKAGE,
     SHARED_PACKAGE,
@@ -46,7 +47,9 @@ from scripts.contract_sync import ROOT
 from scripts.line_cap import LineCapError, line_cap, lines_in
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Mapping, Sequence
+
+    from scripts.contract_generator.actions import Described
 
 __all__ = ["OUT", "ROOT", "ArtefactRefusedError", "generate", "run"]
 
@@ -72,7 +75,8 @@ def generate(
     actions = actions_of(artefact)
     reads = reads_of(artefact)
 
-    writer = Writer(users=users_of(kinds))
+    routes = {one.route: {"$defs": one.definitions} for one in actions}
+    writer = Writer(users=users_of({**kinds, **routes}))
     names = sorted(kinds)
     for kind in names:
         writer.owned[f"{pascal(kind)}Envelope"] = f"the envelope carrying `{kind}`"
@@ -93,11 +97,14 @@ def generate(
         for name in sorted(writer.definitions):
             writer.definition(name)
         writer.envelope(kinds[kind])
+    write_requests(writer, actions)
 
     formatter = Formatter(ROOT / "ruff.toml")
-    layout = Layout(writer.shapes, formatter, limit)
+    placed = {name: table.path for table in tables for name in table.names}
+    layout = Layout(writer.shapes, formatter, limit, placed)
     modules = layout.modules()
     kind_paths = sorted(path for path in layout.groups if path[: len(KINDS_PACKAGE)] == KINDS_PACKAGE)
+    body_paths = sorted(path for path in layout.groups if path[: len(BODIES_PACKAGE)] == BODIES_PACKAGE)
     shared_paths = sorted(path for path in layout.groups if path[: len(SHARED_PACKAGE)] == SHARED_PACKAGE)
     modules.extend(
         [
@@ -114,6 +121,10 @@ def generate(
         ("reads",),
         REFUSALS_PACKAGE,
     ]
+    if body_paths:
+        summary = "The request each action is posted with, and the shapes only that action carries."
+        modules.append(index(BODIES_PACKAGE, summary, body_paths))
+        members.append(BODIES_PACKAGE)
     if shared_paths:
         modules.append(index(SHARED_PACKAGE, "Every shape more than one kind carries.", shared_paths))
         members.append(SHARED_PACKAGE)
@@ -122,6 +133,16 @@ def generate(
     )
     modules.append(index((), summary, sorted(members)))
     return fitted(modules, formatter, limit)
+
+
+def write_requests(writer: Writer, actions: Sequence[Described]) -> None:
+    """Write the request each action is posted with, and every definition its arguments reach."""
+    for action in actions:
+        writer.kind = action.route
+        writer.definitions = action.definitions
+        for name in sorted(writer.definitions):
+            writer.definition(name)
+        writer.request(action)
 
 
 def fitted(modules: list[Module], formatter: Formatter, cap: int) -> dict[pathlib.Path, str]:

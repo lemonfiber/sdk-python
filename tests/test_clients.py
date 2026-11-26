@@ -118,10 +118,10 @@ def test_a_refusal_is_read_by_its_status_carrying_its_code_and_sentence(
 
 
 def test_a_refusal_in_prose_carries_the_sentence_and_no_code(client: Driver, stack: Stack) -> None:
-    stack.reply("POST", "/api/actions/no-such", Reply(404, "lemonfiber offers no action called no-such."))
+    stack.reply("POST", "/api/actions/restart", Reply(404, "lemonfiber offers no action called restart."))
     with pytest.raises(MissingError) as refused:
-        client.act("no-such")
-    assert refused.value.sentence == "lemonfiber offers no action called no-such."
+        client.act("restart")
+    assert refused.value.sentence == "lemonfiber offers no action called restart."
     assert refused.value.code is None
     assert refused.value.problem is None
 
@@ -527,8 +527,8 @@ def test_an_action_is_posted_once_with_its_arguments(client: Driver, stack: Stac
 
 
 def test_an_action_with_no_arguments_sends_an_empty_object(client: Driver, stack: Stack) -> None:
-    stack.reply("POST", "/api/actions/stop", Reply(body=envelope("lifecycle", {})))
-    client.act("stop")
+    stack.reply("POST", "/api/actions/seed", Reply(body=envelope("lifecycle", {})))
+    client.act("seed")
     assert stack.arrived[0].body == b"{}"
 
 

@@ -13,6 +13,8 @@ if TYPE_CHECKING:
     from collections.abc import Coroutine, Mapping, Sequence
 
     from lemonfiber import (
+        ActionName,
+        ActionRequest,
         Address,
         BundleFile,
         CapabilitySet,
@@ -154,8 +156,12 @@ class Driver(Protocol):
         """Fetch a kept ask's cover."""
         ...
 
-    def act(self, action: str, arguments: Mapping[str, Json] | None = None) -> Envelope:
-        """Act."""
+    def act(self, action: ActionName, arguments: Mapping[str, Json] | None = None) -> Envelope:
+        """Act by name."""
+        ...
+
+    def request(self, request: ActionRequest) -> Envelope:
+        """Act on a request."""
         ...
 
     def keys(self) -> KeysEnvelope:
@@ -264,9 +270,13 @@ class SyncDriver:
         """Fetch a kept ask's cover."""
         return self.client.request_poster(reference, query)
 
-    def act(self, action: str, arguments: Mapping[str, Json] | None = None) -> Envelope:
-        """Act."""
+    def act(self, action: ActionName, arguments: Mapping[str, Json] | None = None) -> Envelope:
+        """Act by name."""
         return self.client.act(action, arguments)
+
+    def request(self, request: ActionRequest) -> Envelope:
+        """Act on a request."""
+        return self.client.act(request)
 
     def keys(self) -> KeysEnvelope:
         """List the keys."""
@@ -387,9 +397,13 @@ class AsyncDriver:
         """Fetch a kept ask's cover."""
         return self.run(self.client.request_poster(reference, query))
 
-    def act(self, action: str, arguments: Mapping[str, Json] | None = None) -> Envelope:
-        """Act."""
+    def act(self, action: ActionName, arguments: Mapping[str, Json] | None = None) -> Envelope:
+        """Act by name."""
         return self.run(self.client.act(action, arguments))
+
+    def request(self, request: ActionRequest) -> Envelope:
+        """Act on a request."""
+        return self.run(self.client.act(request))
 
     def keys(self) -> KeysEnvelope:
         """List the keys."""

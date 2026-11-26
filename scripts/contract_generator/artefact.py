@@ -264,7 +264,7 @@ def checked(artefact: Mapping[str, object], stamp: str) -> None:
             f"the vendored contract is api_version {json.dumps(version)}, and this package implements "
             f"{SPOKEN}. Sync a matching release, or implement the newer version first.",
         )
-    found = list(ambiguous(kinds_of(artefact), ""))
+    found = [*ambiguous(kinds_of(artefact), ""), *ambiguous(artefact.get("actions"), "actions")]
     if found:
         refuse(
             "the vendored contract puts a constraint beside a reference, and generating would drop "

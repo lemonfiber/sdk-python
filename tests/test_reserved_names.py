@@ -19,7 +19,10 @@ def handed_on_beside_the_shapes() -> set[str]:
     """Return every name a committed module written from the artefact's lists hands on."""
     names: set[str] = set()
     for path in (ROOT / OUT).rglob("*.py"):
-        if path.relative_to(ROOT / OUT).parts[0] in {"kinds", "shared"} or path.name == "__init__.py":
+        if (
+            path.relative_to(ROOT / OUT).parts[0] in {"bodies", "kinds", "shared"}
+            or path.name == "__init__.py"
+        ):
             continue
         for node in ast.parse(path.read_text(encoding="utf-8")).body:
             if isinstance(node, ast.Assign) and any(

@@ -3,12 +3,13 @@
 
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from scripts.contract_generator.artefact import ACTION, array_of, object_of, unread_fields
 from scripts.contract_generator.modules import Module
 from scripts.contract_generator.refused import refuse
+from scripts.contract_generator.tables import API
 
 if TYPE_CHECKING:
     from collections.abc import Iterator, Mapping, Sequence
@@ -16,11 +17,34 @@ if TYPE_CHECKING:
 ARGUMENT = re.compile(r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$")
 """An action's argument, as the core spells one: `dry_run`."""
 
-ACTION_FIELDS = ("action", "arguments", "consent", "rehearsal")
+ACTION_FIELDS = ("action", "arguments", "consent", "rehearsal", "$defs")
 """Everything the contract says of an action. Anything else is refused, not dropped."""
 
 ARGUMENT_FIELDS = ("name", "type")
 """Everything the contract says of an action's argument. Anything else is refused, not dropped."""
+
+DRY_RUN = "dry_run"
+"""The argument an action that can be rehearsed takes to rehearse, which `rehearsal` says rather than the list."""
+
+REQUEST = "ActionRequest"
+"""What the request every action is posted with is written as a kind of."""
+
+NAMED = "ACTION"
+"""Where a request holds the name of the action it is posted to."""
+
+HANDED_ON = "arguments"
+"""What every action request hands its arguments on with, which no argument may be named."""
+
+ROUTE = f"{API}/actions"
+"""Where every action is posted, beneath which each takes its own name."""
+
+
+@dataclass(frozen=True)
+class Argument:
+    """One argument an action takes, by name, with the schema of its type."""
+
+    name: str
+    schema: dict[str, object]
 
 
 @dataclass(frozen=True)
@@ -28,27 +52,39 @@ class Described:
     """One action the web API takes, as the contract describes it."""
 
     action: str
-    arguments: tuple[str, ...]
-    """The name of every argument it takes, in the contract's order."""
+    arguments: tuple[Argument, ...]
+    """Every argument it takes, in the contract's order."""
     consent: tuple[str, ...]
     """The arguments carrying the operator's yes."""
     rehearsal: bool
     """Whether it takes `dry_run`."""
+    definitions: dict[str, object] = field(default_factory=dict[str, object])
+    """Every definition its arguments reach, by name."""
+
+    @property
+    def route(self) -> str:
+        """Return where it is posted."""
+        return f"{ROUTE}/{self.action}"
 
 
-def wrong_with_arguments(name: str, listed: Sequence[object], named: list[str]) -> Iterator[str]:
-    """Yield everything wrong with an action's arguments, noting each name in `named`."""
+def wrong_with_arguments(name: str, listed: Sequence[object], named: list[Argument]) -> Iterator[str]:
+    """Yield everything wrong with an action's arguments, noting each one in `named`."""
     for at, entry in enumerate(listed):
         argument = object_of(entry)
         called = argument.get("name") if argument is not None else None
         if argument is None or not isinstance(called, str) or not ARGUMENT.fullmatch(called):
             yield f"{name}: argument {at} is not named as an argument"
             continue
-        if called in named:
+        if any(one.name == called for one in named):
             yield f"{name}: argument {called} is listed twice"
-        named.append(called)
-        if object_of(argument.get("type")) is None:
+        if called == DRY_RUN:
+            yield f"{name}: argument {DRY_RUN} is the rehearsal, which `rehearsal` says"
+        if called == HANDED_ON:
+            yield f"{name}: argument {HANDED_ON} takes the name every action request hands its arguments on with"
+        schema = object_of(argument.get("type"))
+        if schema is None:
             yield f"{name}: argument {called} has no schema for its type"
+        named.append(Argument(called, schema or {}))
         yield from unread_fields(f"{name}: argument {called}", argument, ARGUMENT_FIELDS)
 
 
@@ -68,12 +104,16 @@ def read_described(name: str, entry: object) -> tuple[Described | None, list[str
     listed = array_of(described.get("arguments"))
     if listed is None:
         wrong.append(f"{name}: arguments {json.dumps(described.get('arguments'))} is not a list")
-    named: list[str] = []
+    named: list[Argument] = []
     wrong.extend(wrong_with_arguments(name, listed or [], named))
+    definitions = object_of(described.get("$defs", {}))
+    if definitions is None:
+        wrong.append(f"{name}: $defs {json.dumps(described.get('$defs'))} is not an object of definitions")
     consent = array_of(described.get("consent"))
     if consent is None:
         wrong.append(f"{name}: consent {json.dumps(described.get('consent'))} is not a list")
-    carrying = [one for one in consent or [] if isinstance(one, str) and one in named]
+    names = [one.name for one in named]
+    carrying = [one for one in consent or [] if isinstance(one, str) and one in names]
     wrong.extend(
         f"{name}: consent names {json.dumps(one)}, which is none of its arguments"
         for one in consent or []
@@ -82,7 +122,7 @@ def read_described(name: str, entry: object) -> tuple[Described | None, list[str
     wrong.extend(unread_fields(name, described, ACTION_FIELDS))
     if wrong:
         return None, wrong
-    return Described(name, tuple(named), tuple(carrying), rehearsal is True), []
+    return Described(name, tuple(named), tuple(carrying), rehearsal is True, definitions or {}), []
 
 
 def actions_of(artefact: Mapping[str, object]) -> list[Described]:
@@ -138,7 +178,8 @@ def actions_module(described: Sequence[Described]) -> Module:
         "ACTIONS: typing.Final[typing.Mapping[ActionName, ActionDescribed]] = types.MappingProxyType({",
     ]
     body.extend(
-        f"    {json.dumps(one.action)}: ActionDescribed({tupled(one.arguments)}, {tupled(one.consent)}, "
+        f"    {json.dumps(one.action)}: ActionDescribed({tupled([each.name for each in one.arguments])}, "
+        f"{tupled(one.consent)}, "
         f"{one.rehearsal}),"
         for one in described
     )
@@ -151,8 +192,24 @@ def actions_module(described: Sequence[Described]) -> Module:
             "def is_action_name(value: str) -> typing.TypeIs[ActionName]:",
             '    """Tell whether a name is one of an action the web API takes."""',
             "    return value in ACTIONS",
+            "",
+            "",
+            "@dataclasses.dataclass(frozen=True, kw_only=True, slots=True)",
+            f"class {REQUEST}:",
+            '    """One action the web API takes, with the arguments it is posted with."""',
+            "",
+            f"    {NAMED}: typing.ClassVar[ActionName]",
+            '    """The name it is posted to under `/api/actions/`."""',
+            "",
+            f"    def {HANDED_ON}(self) -> dict[str, object]:",
+            '        """Return the arguments it is posted with, each under the name the contract gives it.',
+            "",
+            "        An argument Python reserves the name of is a field spelled with a trailing underscore,",
+            "        as `pass_` is posted as `pass`.",
+            '        """',
+            '        return {one.name.removesuffix("_"): getattr(self, one.name) for one in dataclasses.fields(self)}',
         ],
     )
-    names = ["ACTIONS", "ActionDescribed", "ActionName", "is_action_name"]
-    summary = "Every action the web API takes, and what the contract says of each."
-    return Module(("actions",), summary, body, names, standard=("types", "typing"))
+    names = ["ACTIONS", "ActionDescribed", "ActionName", REQUEST, "is_action_name"]
+    summary = "Every action the web API takes, what the contract says of each, and what each request is."
+    return Module(("actions",), summary, body, names, standard=("dataclasses", "types", "typing"))

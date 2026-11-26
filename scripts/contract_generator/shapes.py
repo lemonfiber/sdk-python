@@ -59,6 +59,8 @@ class Shape:
     fields: list[tuple[str, str, bool]] | None = None
     """A functional TypedDict's keys, annotations and whether each is required, written out once the order is known."""
     description: str | None = None
+    standard: tuple[str, ...] = ()
+    """The standard modules it is written with beside `typing`."""
 
     def refers_to(self, known: Collection[str]) -> set[str]:
         """Return every other shape of `known` this one names."""

@@ -41,6 +41,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
 
     from lemonfiber._generated import (
+        ActionRequest,
         DeviceChallengeEnvelope,
         DeviceKeyEnvelope,
         DeviceKeysEnvelope,
@@ -96,9 +97,9 @@ def picture(template: str, name: str, value: str, query: Query | None) -> Operat
     return Operation(picture_call(template, name, value, query), picture_of, again=True)
 
 
-def action(name: str, arguments: Mapping[str, Json] | None) -> Operation[Envelope]:
-    """Tell lemonfiber to do something the command line could also do."""
-    return Operation(action_call(name, arguments), envelope_of)
+def action(action: ActionRequest | str, arguments: Mapping[str, Json] | None) -> Operation[Envelope]:
+    """Tell lemonfiber to do something the command line could also do: a request, or an action by name."""
+    return Operation(action_call(action, arguments), envelope_of)
 
 
 def job(name: str) -> Operation[JobStanding]:

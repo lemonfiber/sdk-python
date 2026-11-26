@@ -163,10 +163,12 @@ the id the search lists it under, and takes `member`, `kind` and, for music or
 books, `unit`:
 
 ```python
+from lemonfiber.contract import AskAction
+
 found = expect(client.read(Read.ASKABLE, {"member": "ada", "term": "dune"}), "askable")
 title = found["data"]["titles"][0]
 poster = client.askable_poster(title["id"], {"member": "ada", "kind": title["kind"]})
-client.act("ask", {"name": "ada", "id": title["id"], "kind": title["kind"]})
+client.act(AskAction(name="ada", id=title["id"], kind=title["kind"]))
 ```
 
 A title the member may not ask for raises `MissingError` with `WISH-3`, and one
@@ -212,12 +214,32 @@ with the same `stack` reach the same stack.
 ## Acting
 
 `act` sends an action once and never retries it, because a second sending would
-be a second change; `release` is sent once too. The action names and arguments are the command line's own.
+be a second change; `release` is sent once too. It takes one of two things.
+
+A request, generated for each action the contract lists and imported from
+`lemonfiber.contract`: `RestartAction` for `restart`. Each argument is a field
+typed as the contract types it and defaulted as the contract defaults it; one
+with no default is required. `dry_run` is a field only where the action can be
+rehearsed, and an argument Python reserves the name of takes a trailing
+underscore, as `PlayAction(pass_=...)` posts `pass`. Every request is an
+`ActionRequest`, its `ACTION` the name it is posted to.
 
 ```python
-await client.act("restart", {"services": ["sonarr"], "dry_run": True})  # says what it would do; does nothing
-started = expect(await client.act("restart", {"services": ["sonarr"]}), "job")
+from lemonfiber.contract import RestartAction
+
+await client.act(RestartAction(services=["sonarr"], dry_run=True))  # says what it would do; does nothing
+started = expect(await client.act(RestartAction(services=["sonarr"])), "job")
 outcome = await client.follow(started)  # Finished or Ended; a failure is raised
+```
+
+Or an action by name, an `ActionName`, with its arguments beside it. `ACTIONS`
+is the generated table of every action: each one's argument names, the arguments
+carrying the operator's yes, and whether it can be rehearsed. A name read at run
+time is narrowed to an `ActionName` by `is_action_name`:
+
+```python
+if is_action_name(named):
+    await client.act(named, {"offer": offer})
 ```
 
 An action that reaches the services answers with a job rather than its outcome.

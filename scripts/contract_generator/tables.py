@@ -19,7 +19,10 @@ KINDS_PACKAGE = ("kinds",)
 """Where each kind's envelope, and the shapes only it carries, are written."""
 
 SHARED_PACKAGE = ("shared",)
-"""Where the shapes more than one kind carries are written."""
+"""Where the shapes more than one kind or action carries are written."""
+
+BODIES_PACKAGE = ("bodies",)
+"""Where the request each action is posted with, and the shapes only it carries, are written."""
 
 REFUSALS_PACKAGE = ("refusals",)
 """Where the refusal codes, and what the contract says of each family's, are written."""

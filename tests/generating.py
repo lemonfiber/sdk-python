@@ -15,6 +15,9 @@ if TYPE_CHECKING:
     import pathlib
     import types
 
+DIALECT = "https://json-schema.org/draft/2020-12/schema"
+"""The dialect the core writes every schema in."""
+
 ENVELOPE_DESCRIPTION = "The wrapper every machine-readable payload arrives in."
 
 CODE = {"description": "A stable identifier.\n\nNever recycled.", "type": "string"}
@@ -23,7 +26,7 @@ CODE = {"description": "A stable identifier.\n\nNever recycled.", "type": "strin
 def kind(data: object, definitions: dict[str, object] | None = None) -> dict[str, object]:
     """Return one kind's envelope schema, as the core writes one."""
     schema: dict[str, object] = {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$schema": DIALECT,
         "title": "Envelope",
         "description": ENVELOPE_DESCRIPTION,
         "type": "object",
@@ -114,9 +117,17 @@ def exploded(whole: dict[str, object]) -> dict[str, object]:
         index[listed] = {part: f"{listed}/{part}.json" for part in parts}
         files.update({f"{listed}/{part}.json": entries for part, entries in parts.items()})
     if isinstance(whole.get("actions"), dict):
-        described = typing.cast("dict[str, object]", whole["actions"])
+        described = typing.cast("dict[str, dict[str, object]]", whole["actions"])
         index["actions"] = {name: f"actions/{name}.json" for name in described}
-        files.update({f"actions/{name}.json": action for name, action in described.items()})
+        for name, action in described.items():
+            files[f"actions/{name}.json"] = relinked(
+                {key: value for key, value in action.items() if key != "$defs"},
+                "../defs/",
+            )
+            definitions = typing.cast("dict[str, dict[str, object]]", action.get("$defs", {}))
+            for defined, definition in definitions.items():
+                spelled = typing.cast("dict[str, object]", relinked(definition, ""))
+                files[f"defs/{defined}.json"] = {"$schema": DIALECT, **spelled}
     elif "actions" in whole:
         index["actions"] = whole["actions"]
     for name, schema in typing.cast("dict[str, dict[str, object]]", whole["kinds"]).items():
