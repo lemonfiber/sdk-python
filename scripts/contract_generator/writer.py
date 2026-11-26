@@ -7,21 +7,26 @@ import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, cast
 
+from scripts.contract_generator.actions import DRY_RUN, NAMED, REQUEST
 from scripts.contract_generator.artefact import (
     ANNOTATIONS,
     DIALECT,
     INLINE,
+    array_of,
     as_list,
     as_map,
     as_maps,
     object_of,
 )
+from scripts.contract_generator.layout import ticked
 from scripts.contract_generator.refused import ArtefactRefusedError, refuse
 from scripts.contract_generator.shapes import Field, Shape, class_lines
 from scripts.contract_generator.spelling import docstring, is_field_name, literal, pascal
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
+
+    from scripts.contract_generator.actions import Described
 
 NARROWING = frozenset(
     {
@@ -58,6 +63,9 @@ REFERENCE = re.compile(rf"^{re.escape(INLINE)}([^/]+)$")
 PRIMITIVES = {"string": "str", "integer": "int", "number": "float", "boolean": "bool", "null": "None"}
 """The Python type of each JSON type that holds no other value."""
 
+REHEARSING = "Whether to rehearse: write nothing, and answer with what the action would do."
+"""What `dry_run` is, on every action that can be rehearsed."""
+
 ENVELOPE_FIELDS = ("api_version", "kind", "data")
 """What every envelope requires."""
 
@@ -84,6 +92,26 @@ OWNED = {
     "READS": "what the contract says of each read answering with one envelope",
 }
 """Names this generator writes itself, and what each one means here."""
+
+
+def spelled_value(value: object) -> str:
+    """Write a JSON value as the Python expression it is."""
+    if value is None or isinstance(value, bool | int | float):
+        return repr(value)
+    items = array_of(value)
+    if items is not None:
+        return f"[{', '.join(spelled_value(item) for item in items)}]"
+    entries = object_of(value)
+    if entries is not None:
+        return f"{{{', '.join(f'{json.dumps(key)}: {spelled_value(one)}' for key, one in entries.items())}}}"
+    return json.dumps(value)
+
+
+def defaulted(value: object) -> str:
+    """Write a field's default: the value itself, or a factory for a list or an object, so no two requests share one."""
+    if array_of(value) is None and object_of(value) is None:
+        return spelled_value(value)
+    return f"dataclasses.field(default_factory=lambda: {spelled_value(value)})"
 
 
 def joined(node: dict[str, object], origin: str) -> dict[str, object]:
@@ -351,3 +379,36 @@ class Writer:
                 annotation = f"typing.NotRequired[{annotation}]"
             lines.append(f"    {key}: {annotation}")
         self.shapes[name] = Shape(name, origin, lines, frozenset({self.kind}), annotations)
+
+    def request(self, described: Described) -> None:
+        """Write the request an action is posted with: each argument a field, defaulted as the contract defaults it."""
+        name = f"{pascal(described.action)}Action"
+        origin = f"the action `{described.action}`"
+        summary = f"The action `{described.action}`, with the arguments it is posted with."
+        if described.consent:
+            verb = "carries" if len(described.consent) == 1 else "carry"
+            summary += f" {ticked(described.consent)} {verb} the operator's yes."
+        lines = [
+            "@dataclasses.dataclass(frozen=True, kw_only=True, slots=True)",
+            f"class {name}({REQUEST}):",
+            *docstring(summary, "    "),
+            "",
+            f"    {NAMED} = {json.dumps(described.action)}",
+            "",
+        ]
+        annotations = [REQUEST]
+        for argument in described.arguments:
+            where = f"{origin} argument `{argument.name}`"
+            node = self.node(argument.schema, where)
+            annotation = self.annotation(node, name + pascal(argument.name), where)
+            annotations.append(annotation)
+            spelled = f"{argument.name}_" if keyword.iskeyword(argument.name) else argument.name
+            default = f" = {defaulted(node['default'])}" if "default" in node else ""
+            lines.append(f"    {spelled}: {annotation}{default}")
+            said = node.get("description")
+            if isinstance(said, str):
+                lines.extend(docstring(said, "    "))
+        if described.rehearsal:
+            lines.extend([f"    {DRY_RUN}: bool = False", *docstring(REHEARSING, "    ")])
+        self.claim(name, origin, lines, annotations)
+        self.shapes[name].standard = ("dataclasses",)

@@ -6,8 +6,8 @@ each list, or for each part of a list, and a file for each definition under
 `defs/`, named for it. The parts of a list are gathered into the one object the
 single file holds, and an entry two parts both list is refused. A `$ref`
 is a path resolved against the file it sits in. The directory is read into the
-artefact the single file `contract/web-api.contract.json` holds: each kind
-carrying under `$defs` every definition it reaches, and every reference spelled
+artefact the single file `contract/web-api.contract.json` holds: each kind and
+each action carrying under `$defs` every definition it reaches, and every reference spelled
 `#/$defs/<Name>`. The same contract in either layout is the same artefact, so it
 generates the same files.
 """
@@ -78,10 +78,16 @@ class Directory:
             whole[ACTIONS] = (
                 index[ACTIONS]
                 if files is None
-                else {name: document(self.root, self.named(file)) for name, file in sorted(files.items())}
+                else {name: self.action(self.named(file)) for name, file in sorted(files.items())}
             )
         whole["kinds"] = {kind: self.kind(self.named(file)) for kind, file in kinds.items()}
         return whole
+
+    def action(self, path: pathlib.PurePosixPath) -> object:
+        """Return one action, carrying every definition its arguments reach, each in one dialect."""
+        described = document(self.root, path)
+        node = object_of(described)
+        return described if node is None else self.carrying(node, path, own_dialect=False)
 
     def listed(self, name: str, files: object) -> object:
         """Return a list the index names one file for, or a file for each part of, gathered into one object."""
@@ -112,8 +118,14 @@ class Directory:
         """Return one kind's schema, carrying every definition it reaches."""
         schema = document(self.root, path)
         node = object_of(schema)
-        if node is None:
-            return schema
+        return schema if node is None else self.carrying(node, path, own_dialect=True)
+
+    def carrying(self, node: dict[str, object], path: pathlib.PurePosixPath, *, own_dialect: bool) -> object:
+        """Return a file's schema carrying every definition it reaches, refusing two dialects among them.
+
+        With `own_dialect`, each definition is held to the dialect the file names;
+        without it, to the dialect of the first definition reached.
+        """
         if "$defs" in node:
             refuse(
                 f"{path} holds $defs, and in {DIRECTORY}/ each definition is a file of its own under defs/",
@@ -121,17 +133,19 @@ class Directory:
         refers: set[str] = set()
         written = self.spelled(node, path, refers)
         reached: dict[str, object] = {}
+        held = (node.get(DIALECT), f"{path}, which reaches it,") if own_dialect else None
         waiting = sorted(refers)
         while waiting:
             name = waiting.pop()
             if name in reached:
                 continue
             definition = self.definition(name)
-            dialect = node.get(DIALECT)
-            if definition.dialect != dialect:
+            if held is None:
+                held = (definition.dialect, f"{definition.path}, which {path} reaches too,")
+            if definition.dialect != held[0]:
                 refuse(
-                    f"{definition.path} is written in {json.dumps(definition.dialect)}, and {path}, "
-                    f"which reaches it, in {json.dumps(dialect)}",
+                    f"{definition.path} is written in {json.dumps(definition.dialect)}, and {held[1]} "
+                    f"in {json.dumps(held[0])}",
                 )
             reached[name] = definition.schema
             waiting.extend(sorted(definition.refers))

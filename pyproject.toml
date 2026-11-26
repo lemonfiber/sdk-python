@@ -107,11 +107,7 @@ minimum-score = 100
 # names it: the symbol, the kind of break, and why. A listed break passes for
 # that symbol and that kind alone, where a commit since the consumer's pin is
 # marked breaking; every other break fails.
-accepted = [
-  { symbol = "lemonfiber._generated.kinds.served.ServedReport.fingerprint", kind = "object-removed", reason = "The contract at f50f13a5 holds the fingerprint inside `certificate`, beside what else the certificate says about itself." },
-  { symbol = "lemonfiber._generated.kinds.plugin_provenance.Based", kind = "object-changed-kind", reason = "Based holds its image and release beside a basis, recorded, unproven or refused; it is the union of those three, each carrying the fields beside it, where the class carried the fields and dropped the branches." },
-  { symbol = "lemonfiber._generated.kinds.plugin_provenance.Vouch", kind = "object-changed-kind", reason = "Vouch holds its digest, image and service beside a provenance, signed, unproven or refused; it is the union of those three, each carrying the fields beside it, where the class carried the fields and dropped the branches." },
-]
+accepted = []
 
 [tool.lemonfiber.line-cap]
 # The most lines a file may hold, as the core holds its own. A source file, the

@@ -1,5 +1,5 @@
 # Copyright (c) 2026 NightWorksIO
-"""Where each shape is written: one module per set of kinds carrying it, in parts where one would outgrow the cap.
+"""Where each shape is written: one module per set of kinds and action routes carrying it, in parts where one would outgrow the cap.
 
 A shape every carrier of which also carries what it names imports only from
 modules carried by more kinds than its own, so the modules import one way. A
@@ -13,7 +13,7 @@ from scripts.contract_generator.modules import Module, index
 from scripts.contract_generator.refused import refuse
 from scripts.contract_generator.shapes import declarations
 from scripts.contract_generator.spelling import module_name
-from scripts.contract_generator.tables import KINDS_PACKAGE, SHARED_PACKAGE
+from scripts.contract_generator.tables import API, BODIES_PACKAGE, KINDS_PACKAGE, SHARED_PACKAGE
 from scripts.line_cap import lines_in
 
 if TYPE_CHECKING:
@@ -41,10 +41,18 @@ def carried(carriers: frozenset[str]) -> str:
     return f"{ticked(carriers)} {'both' if len(carriers) == BOTH else 'all'} carry"
 
 
+def is_route(carrier: str) -> bool:
+    """Tell whether a carrier is the route an action is posted to, rather than a kind."""
+    return carrier.startswith(f"{API}/")
+
+
 def path_of(carriers: frozenset[str], first: str) -> Path:
-    """Return the module the shapes some kinds carry are written in, named after `first` where more than one does."""
+    """Return the module the shapes some kinds or routes carry are written in, named after `first` where more than one does."""
     if len(carriers) == 1:
-        return (*KINDS_PACKAGE, module_name(next(iter(carriers))))
+        carrier = next(iter(carriers))
+        if is_route(carrier):
+            return (*BODIES_PACKAGE, module_name(carrier.removeprefix(f"{API}/").replace("/", "-")))
+        return (*KINDS_PACKAGE, module_name(carrier))
     return (*SHARED_PACKAGE, module_name(first))
 
 
@@ -138,20 +146,31 @@ def module_of(path: Path, summary: str, members: Mapping[str, Shape], where: Map
         for other in shape.refers_to(where):
             if other not in members:
                 imports.setdefault(where[other], set()).add(other)
-    standard = ("typing",) if any(uses_typing(shape) for shape in members.values()) else ()
-    return Module(path, summary, declarations(members), sorted(members), imports, standard)
+    standard = {one for shape in members.values() for one in shape.standard}
+    if any(uses_typing(shape) for shape in members.values()):
+        standard.add("typing")
+    return Module(path, summary, declarations(members), sorted(members), imports, tuple(sorted(standard)))
 
 
 class Layout:
     """Lays every shape out in modules, each within the cap, asking the formatter how long each would be."""
 
-    def __init__(self, shapes: Mapping[str, Shape], formatter: Formatter, cap: int) -> None:
-        """Hold the shapes, the formatter and the cap."""
+    def __init__(
+        self,
+        shapes: Mapping[str, Shape],
+        formatter: Formatter,
+        cap: int,
+        placed: Mapping[str, Path] | None = None,
+    ) -> None:
+        """Hold the shapes, the formatter and the cap, and where each name `placed` holds is written already."""
         check_carried(shapes)
         self._formatter = formatter
         self._cap = cap
         self.groups = grouped(shapes)
-        self._where = {name: path for path, members in self.groups.items() for name in members}
+        self._where = {
+            **(placed or {}),
+            **{name: path for path, members in self.groups.items() for name in members},
+        }
 
     def length(self, module: Module) -> int:
         """Return how many lines a module holds once formatted."""
@@ -177,6 +196,8 @@ class Layout:
     def holds(self, path: Path) -> str:
         """Say what the module at `path` holds."""
         carriers = next(iter(self.groups[path].values())).carriers
+        if len(carriers) == 1 and is_route(next(iter(carriers))):
+            return f"The action posted to {ticked(carriers)}, and the shapes {carried(carriers)}"
         if len(carriers) == 1:
             return f"The {ticked(carriers)} envelope, and the shapes {carried(carriers)}"
         return f"The shapes {carried(carriers)}"

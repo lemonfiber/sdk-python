@@ -11,7 +11,7 @@ context per request for the same reason.
 """
 
 import asyncio
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING, Self, overload
 
 import aiohttp
 
@@ -34,6 +34,8 @@ if TYPE_CHECKING:
     from types import TracebackType
 
     from lemonfiber._generated import (
+        ActionName,
+        ActionRequest,
         DeviceChallengeEnvelope,
         DeviceKeyEnvelope,
         DeviceKeysEnvelope,
@@ -153,8 +155,20 @@ class AsyncClient:
         """
         return await self._run(operation.picture(REQUESTS_REFERENCE_POSTER, REFERENCE, reference, query))
 
-    async def act(self, action: str, arguments: Mapping[str, Json] | None = None) -> Envelope:
-        """Tell lemonfiber to do something the command line could also do. Sent once, never retried."""
+    @overload
+    async def act(self, action: ActionRequest) -> Envelope: ...
+    @overload
+    async def act(self, action: ActionName, arguments: Mapping[str, Json] | None = None) -> Envelope: ...
+    async def act(
+        self,
+        action: ActionRequest | ActionName,
+        arguments: Mapping[str, Json] | None = None,
+    ) -> Envelope:
+        """Tell lemonfiber to do something the command line could also do. Sent once, never retried.
+
+        `action` is a request, its arguments typed as the contract types that action's, or an action the
+        contract lists by name with `arguments` beside it.
+        """
         return await self._run(operation.action(action, arguments))
 
     async def keys(self) -> KeysEnvelope:

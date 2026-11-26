@@ -9,7 +9,7 @@ address alone, so no argument reaches the transport's options.
 """
 
 import time
-from typing import TYPE_CHECKING, Final, Self
+from typing import TYPE_CHECKING, Final, Self, overload
 
 import urllib3
 import urllib3.exceptions
@@ -38,6 +38,8 @@ if TYPE_CHECKING:
     from types import TracebackType
 
     from lemonfiber._generated import (
+        ActionName,
+        ActionRequest,
         DeviceChallengeEnvelope,
         DeviceKeyEnvelope,
         DeviceKeysEnvelope,
@@ -276,8 +278,20 @@ class SyncClient:
         """
         return self._run(operation.picture(REQUESTS_REFERENCE_POSTER, REFERENCE, reference, query))
 
-    def act(self, action: str, arguments: Mapping[str, Json] | None = None) -> Envelope:
-        """Tell lemonfiber to do something the command line could also do. Sent once, never retried."""
+    @overload
+    def act(self, action: ActionRequest) -> Envelope: ...
+    @overload
+    def act(self, action: ActionName, arguments: Mapping[str, Json] | None = None) -> Envelope: ...
+    def act(
+        self,
+        action: ActionRequest | ActionName,
+        arguments: Mapping[str, Json] | None = None,
+    ) -> Envelope:
+        """Tell lemonfiber to do something the command line could also do. Sent once, never retried.
+
+        `action` is a request, its arguments typed as the contract types that action's, or an action the
+        contract lists by name with `arguments` beside it.
+        """
         return self._run(operation.action(action, arguments))
 
     def keys(self) -> KeysEnvelope:

@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from http import HTTPMethod, HTTPStatus
 from typing import TYPE_CHECKING, Final
 
-from lemonfiber._generated import READS
+from lemonfiber._generated import READS, ActionRequest
 from lemonfiber.files import PICTURE_MOST, PICTURE_TYPES
 from lemonfiber.problems import MisaskedError
 from lemonfiber.reads import ACTIONS, BUNDLE, CAPABILITIES, DEVICE_KEYS, JOBS, KEY_CLAIMS, KEYS, LOGS, SESSION
@@ -181,9 +181,14 @@ def picture_call(template: str, name: str, value: str, query: Query | None) -> C
     return Call(HTTPMethod.GET, path + search(query), {"Accept": ", ".join(PICTURE_TYPES)}, most=PICTURE_MOST)
 
 
-def action_call(name: str, arguments: Mapping[str, Json] | None) -> Call:
-    """Tell lemonfiber to do something the command line could also do."""
-    return posted(f"{ACTIONS}/{segment(name)}", arguments or {})
+def action_call(action: ActionRequest | str, arguments: Mapping[str, Json] | None) -> Call:
+    """Tell lemonfiber to do something the command line could also do: a request, or an action by name."""
+    if isinstance(action, str):
+        return posted(f"{ACTIONS}/{segment(action)}", arguments or {})
+    if arguments is not None:
+        sentence = "An action's request carries its own arguments, and was given more beside it."
+        raise MisaskedError(sentence, status=HTTPStatus.BAD_REQUEST)
+    return posted(f"{ACTIONS}/{segment(action.ACTION)}", action.arguments())
 
 
 def job_call(job: str, method: HTTPMethod) -> Call:
@@ -270,7 +275,7 @@ def collect_call(claim: str) -> Call:
     return posted(KEY_CLAIMS, {"claim": claim})
 
 
-def posted(path: str, body: Mapping[str, Json]) -> Call:
+def posted(path: str, body: Mapping[str, object]) -> Call:
     """Send a JSON body to a door that takes one, asking to be answered in JSON."""
     headers = {"Accept": JSON_TYPE, "Content-Type": JSON_TYPE}
     return Call(HTTPMethod.POST, path, headers, json.dumps(dict(body)).encode())
