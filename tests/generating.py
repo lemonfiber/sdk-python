@@ -113,6 +113,12 @@ def exploded(whole: dict[str, object]) -> dict[str, object]:
             continue
         index[listed] = {part: f"{listed}/{part}.json" for part in parts}
         files.update({f"{listed}/{part}.json": entries for part, entries in parts.items()})
+    if isinstance(whole.get("actions"), dict):
+        described = typing.cast("dict[str, object]", whole["actions"])
+        index["actions"] = {name: f"actions/{name}.json" for name in described}
+        files.update({f"actions/{name}.json": action for name, action in described.items()})
+    elif "actions" in whole:
+        index["actions"] = whole["actions"]
     for name, schema in typing.cast("dict[str, dict[str, object]]", whole["kinds"]).items():
         envelope = {key: value for key, value in schema.items() if key != "$defs"}
         kinds[name] = f"kinds/{name}.json"

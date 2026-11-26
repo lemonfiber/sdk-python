@@ -21,6 +21,9 @@ from scripts.contract_generator.artefact import DIALECT, INLINE, UNKNOWN, array_
 from scripts.contract_generator.refused import ArtefactRefusedError, refuse
 from scripts.contract_sync import ARTEFACT, DIRECTORY, INDEX, LISTS, STAMP
 
+ACTIONS = "actions"
+"""Where the index names the file of each action, by the action's name."""
+
 DEFINITIONS = DIRECTORY / "defs"
 """Where the directory holds its definitions, one file each."""
 
@@ -70,6 +73,13 @@ class Directory:
         for listed in LISTS:
             if listed in index:
                 whole[listed] = self.listed(listed, index[listed])
+        if ACTIONS in index:
+            files = object_of(index[ACTIONS])
+            whole[ACTIONS] = (
+                index[ACTIONS]
+                if files is None
+                else {name: document(self.root, self.named(file)) for name, file in sorted(files.items())}
+            )
         whole["kinds"] = {kind: self.kind(self.named(file)) for kind, file in kinds.items()}
         return whole
 
