@@ -258,9 +258,11 @@ if is_action_name(named):
 ```
 
 An action that reaches the services answers with a job rather than its outcome.
-`job` asks where a job stands, `release` stops it, and `follow` asks every few
-seconds until it is finished or ended (`every=` sets how often, `within=` how
-long before it raises `StillRunningError`).
+`job` asks where a job stands, `release` stops it, `forget` lets its name go and
+leaves the work running, and `follow` asks every few seconds until it is
+finished or ended (`every=` sets how often, `within=` how long before it raises
+`StillRunningError`). After `forget` the name is no such job, as a name another
+credential started is, and what the work ends with is kept for nobody.
 
 ### What an integration key may call
 

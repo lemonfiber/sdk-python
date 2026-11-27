@@ -556,6 +556,19 @@ def test_work_that_ended_before_it_finished_is_ended(client: Driver, stack: Stac
     assert stack.arrived[0].method == "DELETE"
 
 
+def test_a_forgotten_name_answers_where_the_work_stood(client: Driver, stack: Stack) -> None:
+    stack.reply("POST", "/api/jobs/j-1/forget", Reply(202, STARTED))
+    assert client.forget("j-1") == Running("j-1", expect(read_envelope(STARTED), "job"))
+    assert stack.arrived[0].method == "POST"
+
+
+def test_a_name_refused_by_its_code_is_no_such_job(client: Driver, stack: Stack) -> None:
+    refused = problem("ASK-7", "No work in this run goes by that name.")
+    stack.reply("POST", "/api/jobs/j-9/forget", Reply(404, refused))
+    with pytest.raises(NoSuchJobError):
+        client.forget("j-9")
+
+
 def test_a_name_this_run_never_issued_is_no_such_job(client: Driver, stack: Stack) -> None:
     stack.reply("GET", "/api/jobs/j-9", Reply(404, "No job by that name."))
     with pytest.raises(NoSuchJobError) as refused:

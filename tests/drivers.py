@@ -219,6 +219,10 @@ class Driver(Protocol):
         """Release a job."""
         ...
 
+    def forget(self, job: str) -> JobStanding:
+        """Forget a job."""
+        ...
+
     def follow(
         self,
         job: str | JobEnvelope,
@@ -344,6 +348,10 @@ class SyncDriver:
     def release(self, job: str) -> JobStanding:
         """Release a job."""
         return self.client.release(job)
+
+    def forget(self, job: str) -> JobStanding:
+        """Forget a job."""
+        return self.client.forget(job)
 
     def follow(
         self,
@@ -483,6 +491,10 @@ class AsyncDriver:
     def release(self, job: str) -> JobStanding:
         """Release a job."""
         return self.run(self.client.release(job))
+
+    def forget(self, job: str) -> JobStanding:
+        """Forget a job."""
+        return self.run(self.client.forget(job))
 
     def follow(
         self,
