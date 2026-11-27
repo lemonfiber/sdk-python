@@ -5,6 +5,7 @@ import asyncio
 import io
 import json
 from http import HTTPMethod, HTTPStatus
+from typing import TYPE_CHECKING
 
 import aiohttp
 import pytest
@@ -26,6 +27,9 @@ from lemonfiber.problems import (
     UnreadableResponseError,
 )
 from lemonfiber.reads import HELD_ID_BACKDROP, HELD_ID_POSTER, REQUESTS_REFERENCE_POSTER
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 JSON = {"Accept": "application/json"}
 SENT = {"Accept": "application/json", "Content-Type": "application/json"}
@@ -339,3 +343,35 @@ def test_each_address_is_checked_with_its_pin_a_verifying_context_or_nothing() -
     assert not isinstance(verifying, bool | aiohttp.Fingerprint)
     assert verifying.check_hostname
     assert transport.tls_for(Address("http://127.0.0.1:8080")) is True
+
+
+NAMED_CALLS: list[tuple[str, Callable[[str], calls.Call]]] = [
+    ("asking after work", lambda name: calls.job_call(name, HTTPMethod.GET)),
+    ("releasing work", lambda name: calls.job_call(name, HTTPMethod.DELETE)),
+    ("forgetting work", calls.forget_call),
+    ("a support bundle", calls.bundle_call),
+    ("an action", lambda name: calls.action_call(name, None)),
+    ("revoking a key", calls.revoke_call),
+    ("removing a push endpoint", calls.remove_push_endpoint_call),
+]
+
+
+@pytest.mark.parametrize(
+    ("name", "segment"),
+    [("../a/b", "..%2Fa%2Fb"), ("50%", "50%25"), ("a?b=c", "a%3Fb%3Dc"), ("a#b", "a%23b")],
+)
+def test_a_name_a_caller_hands_over_is_sent_as_one_segment(name: str, segment: str) -> None:
+    assert calls.forget_call(name).path == f"/api/jobs/{segment}/forget"
+    assert calls.job_call(name, HTTPMethod.GET).path == f"/api/jobs/{segment}"
+    assert calls.device_key_path(name) == f"/api/device-keys/{segment}"
+
+
+@pytest.mark.parametrize("name", ["", ".", ".."])
+@pytest.mark.parametrize(("_", "call"), NAMED_CALLS, ids=[named for named, _ in NAMED_CALLS])
+def test_a_name_a_url_would_resolve_away_is_refused_before_anything_is_sent(
+    name: str,
+    _: str,
+    call: Callable[[str], calls.Call],
+) -> None:
+    with pytest.raises(MisaskedError, match="not a name that can be sent"):
+        call(name)
