@@ -88,6 +88,7 @@ def test_each_call_is_the_request_it_names() -> None:
     )
     assert calls.job_call("j/1", HTTPMethod.GET) == calls.Call(HTTPMethod.GET, "/api/jobs/j%2F1", JSON)
     assert calls.job_call("j", HTTPMethod.DELETE) == calls.Call(HTTPMethod.DELETE, "/api/jobs/j", JSON)
+    assert calls.forget_call("j/1") == calls.Call(HTTPMethod.POST, "/api/jobs/j%2F1/forget", JSON)
     assert calls.session_call("pw", None) == calls.Call(
         HTTPMethod.POST,
         "/api/session",
@@ -345,14 +346,30 @@ def test_each_address_is_checked_with_its_pin_a_verifying_context_or_nothing() -
     assert transport.tls_for(Address("http://127.0.0.1:8080")) is True
 
 
-NAMED_CALLS: list[tuple[str, Callable[[str], calls.Call]]] = [
-    ("asking after work", lambda name: calls.job_call(name, HTTPMethod.GET)),
-    ("releasing work", lambda name: calls.job_call(name, HTTPMethod.DELETE)),
-    ("forgetting work", calls.forget_call),
-    ("a support bundle", calls.bundle_call),
-    ("an action", lambda name: calls.action_call(name, None)),
-    ("revoking a key", calls.revoke_call),
-    ("removing a push endpoint", calls.remove_push_endpoint_call),
+NAMED_CALLS: list[tuple[str, Callable[[str], calls.Call], str]] = [
+    ("asking after work", lambda name: calls.job_call(name, HTTPMethod.GET), calls.A_JOB),
+    ("releasing work", lambda name: calls.job_call(name, HTTPMethod.DELETE), calls.A_JOB),
+    ("forgetting work", calls.forget_call, calls.A_JOB),
+    (
+        "a support bundle",
+        calls.bundle_call,
+        "A support bundle is named by the name it was written under, and what was given is not a name that can be sent.",
+    ),
+    (
+        "an action",
+        lambda name: calls.action_call(name, None),
+        "An action is named by its name, and what was given is not a name that can be sent.",
+    ),
+    (
+        "revoking a key",
+        calls.revoke_call,
+        "A key is revoked by its name, and what was given is not a name that can be sent.",
+    ),
+    (
+        "removing a push endpoint",
+        calls.remove_push_endpoint_call,
+        "A push endpoint is named by its name, and what was given is not a name that can be sent.",
+    ),
 ]
 
 
@@ -367,11 +384,14 @@ def test_a_name_a_caller_hands_over_is_sent_as_one_segment(name: str, segment: s
 
 
 @pytest.mark.parametrize("name", ["", ".", ".."])
-@pytest.mark.parametrize(("_", "call"), NAMED_CALLS, ids=[named for named, _ in NAMED_CALLS])
+@pytest.mark.parametrize(("_", "call", "sentence"), NAMED_CALLS, ids=[named for named, _, _ in NAMED_CALLS])
 def test_a_name_a_url_would_resolve_away_is_refused_before_anything_is_sent(
     name: str,
     _: str,
     call: Callable[[str], calls.Call],
+    sentence: str,
 ) -> None:
-    with pytest.raises(MisaskedError, match="not a name that can be sent"):
+    with pytest.raises(MisaskedError) as refused:
         call(name)
+    assert refused.value.sentence == sentence
+    assert refused.value.status == HTTPStatus.BAD_REQUEST
