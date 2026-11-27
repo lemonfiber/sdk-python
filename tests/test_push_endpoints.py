@@ -56,7 +56,8 @@ def test_push_endpoints_are_listed_and_removed_by_name_as_the_contract_example_s
     stack.reply("DELETE", "/api/push-endpoints/a phone", Reply(body=example("push-endpoints")))
     listed = client.push_endpoints()
     assert listed == example("push-endpoints")
-    assert listed["data"]["endpoints"][0]["endpoint"] == ADDRESS
+    assert listed["data"]["endpoints"][0]["host"] == "push.example"
+    assert "endpoint" not in listed["data"]["endpoints"][0]
     assert client.remove_push_endpoint("a phone") == example("push-endpoints")
 
 
