@@ -118,6 +118,7 @@ def test_every_read_is_asked_again(
 ASKED_ONCE: list[tuple[str, str, Callable[[Driver], object]]] = [
     ("POST", "/api/actions/restart", lambda driver: driver.act("restart")),
     ("DELETE", "/api/jobs/j", lambda driver: driver.release("j")),
+    ("POST", "/api/jobs/j/forget", lambda driver: driver.forget("j")),
 ]
 
 

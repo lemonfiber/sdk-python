@@ -114,6 +114,7 @@ def test_each_operation_pairs_its_call_with_the_reading_of_its_answer() -> None:
     assert operation.action("restart", None).call == calls.action_call("restart", None)
     assert operation.job("j").call == calls.job_call("j", HTTPMethod.GET)
     assert operation.release("j").call == calls.job_call("j", HTTPMethod.DELETE)
+    assert operation.forget("j").call == calls.forget_call("j")
     assert operation.admission("pw", "ada").call == calls.session_call("pw", "ada")
     handed = operation.bundle("b").read(calls.Answer(200, {"content-type": "x"}, b"z"))
     assert (handed.name, handed.content, handed.content_type) == ("b", b"z", "x")

@@ -208,6 +208,15 @@ def job_call(job: str, method: HTTPMethod) -> Call:
     return Call(method, f"{JOBS}/{segment(job)}", {"Accept": JSON_TYPE})
 
 
+FORGET: Final = "forget"
+"""What a job's path is followed by where its name is let go and its work left running."""
+
+
+def forget_call(job: str) -> Call:
+    """Let a name go and leave the work it stands for running."""
+    return Call(HTTPMethod.POST, f"{JOBS}/{segment(job)}/{FORGET}", {"Accept": JSON_TYPE})
+
+
 def session_call(password: str, name: str | None) -> Call:
     """Offer a password, and a household member's name where it is one, for a session."""
     offer = {"password": password} if name is None else {"name": name, "password": password}
