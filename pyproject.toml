@@ -107,7 +107,10 @@ minimum-score = 100
 # names it: the symbol, the kind of break, and why. A listed break passes for
 # that symbol and that kind alone, where a commit since the consumer's pin is
 # marked breaking; every other break fails.
-accepted = []
+accepted = [
+  { symbol = "lemonfiber._generated.kinds.push_endpoint.RegisteredPushEndpoint.endpoint", kind = "object-removed", reason = "The core answers a push endpoint's host and fingerprint, never its whole wake address (ARCH-R282)." },
+  { symbol = "lemonfiber._generated.kinds.push_endpoints.ListedPushEndpoint.endpoint", kind = "object-removed", reason = "The core answers a push endpoint's host and fingerprint, never its whole wake address (ARCH-R282)." },
+]
 
 [tool.lemonfiber.line-cap]
 # The most lines a file may hold, as the core holds its own. A source file, the
