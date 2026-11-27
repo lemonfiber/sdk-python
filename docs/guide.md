@@ -71,6 +71,10 @@ made = await client.mint(minting)  # a minted-key envelope; show its secret once
 await client.revoke("home")  # the keys as they now stand
 ```
 
+`revoke`, `revoke_device_key` and `remove_push_endpoint` each take
+`dry_run=True` to rehearse: nothing is removed, and the answer is the listing as
+it would then stand, its `rehearsed` true.
+
 `mint_claim` mints a key as a claim instead, answered with a `key-claim`
 envelope: no secret, but a key link, `lemonfiber://key?...`, that collects the
 key once, within ten minutes. A program holding nothing else collects it with

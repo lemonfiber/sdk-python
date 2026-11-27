@@ -69,7 +69,12 @@ def write(root: pathlib.Path, whole: object, stamp: str | None = "v1.0.0") -> No
         (root / "contract" / "VERSION").write_text(f"{stamp}\n", encoding="utf-8")
 
 
-LISTED = {"key_callable": "key-callable.json", "reads": "reads.json", "refusals": "refusals.json"}
+LISTED = {
+    "key_callable": "key-callable.json",
+    "reads": "reads.json",
+    "refusals": "refusals.json",
+    "routes": "routes.json",
+}
 """Each list the directory's index names, and the file an older core writes it to."""
 
 PARTED = {"refusals"}

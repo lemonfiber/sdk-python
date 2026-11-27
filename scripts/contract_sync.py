@@ -42,7 +42,7 @@ SERVED = "https://codeload.github.com/lemonfiber/lemonfiber/tar.gz/{revision}"
 TIMEOUT_SECONDS = 30
 REVISION = re.compile(r"^(v\d+\.\d+\.\d+|[0-9a-f]{40})$")
 """A release tag, or a full commit hash: an abbreviated one names one contract today and may not later."""
-LISTS = ("key_callable", "reads", "refusals")
+LISTS = ("key_callable", "reads", "refusals", "routes")
 """The lists the index names a file for, or a file for each part of, beside the kinds."""
 
 type Fields = dict[str, object]
