@@ -43,8 +43,11 @@ if TYPE_CHECKING:
         LogEnvelope,
         MintedKey,
         MintedKeyEnvelope,
+        PushEndpointEnvelope,
+        PushEndpointsEnvelope,
     )
     from lemonfiber.device_keys import Registering
+    from lemonfiber.push_endpoints import PushEndpointRegistering
     from lemonfiber.stream import Arrival, Live, Stale
 
 SETTLE = 0.25
@@ -196,6 +199,18 @@ class Driver(Protocol):
         """Revoke a device key."""
         ...
 
+    def register_push_endpoint(self, registering: PushEndpointRegistering) -> PushEndpointEnvelope:
+        """Register a push endpoint."""
+        ...
+
+    def push_endpoints(self) -> PushEndpointsEnvelope:
+        """List the push endpoints."""
+        ...
+
+    def remove_push_endpoint(self, name: str) -> PushEndpointsEnvelope:
+        """Remove a push endpoint."""
+        ...
+
     def job(self, job: str) -> JobStanding:
         """Ask about a job."""
         ...
@@ -309,6 +324,18 @@ class SyncDriver:
     def revoke_device_key(self, name: str) -> DeviceKeysEnvelope:
         """Revoke a device key."""
         return self.client.revoke_device_key(name)
+
+    def register_push_endpoint(self, registering: PushEndpointRegistering) -> PushEndpointEnvelope:
+        """Register a push endpoint."""
+        return self.client.register_push_endpoint(registering)
+
+    def push_endpoints(self) -> PushEndpointsEnvelope:
+        """List the push endpoints."""
+        return self.client.push_endpoints()
+
+    def remove_push_endpoint(self, name: str) -> PushEndpointsEnvelope:
+        """Remove a push endpoint."""
+        return self.client.remove_push_endpoint(name)
 
     def job(self, job: str) -> JobStanding:
         """Ask about a job."""
@@ -436,6 +463,18 @@ class AsyncDriver:
     def revoke_device_key(self, name: str) -> DeviceKeysEnvelope:
         """Revoke a device key."""
         return self.run(self.client.revoke_device_key(name))
+
+    def register_push_endpoint(self, registering: PushEndpointRegistering) -> PushEndpointEnvelope:
+        """Register a push endpoint."""
+        return self.run(self.client.register_push_endpoint(registering))
+
+    def push_endpoints(self) -> PushEndpointsEnvelope:
+        """List the push endpoints."""
+        return self.run(self.client.push_endpoints())
+
+    def remove_push_endpoint(self, name: str) -> PushEndpointsEnvelope:
+        """Remove a push endpoint."""
+        return self.run(self.client.remove_push_endpoint(name))
 
     def job(self, job: str) -> JobStanding:
         """Ask about a job."""

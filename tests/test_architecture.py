@@ -18,7 +18,7 @@ SHARED_GATE = ROOT / "scripts" / "no_open_codeql_alert.py"
 
 TRANSPORTS = {
     "aiohttp": PACKAGE / "_aio",
-    "urllib3": PACKAGE / "_sync.py",
+    "urllib3": PACKAGE / "_sync",
 }
 """Each HTTP library, and the one module or package allowed to import it."""
 

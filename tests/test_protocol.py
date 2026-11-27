@@ -12,9 +12,10 @@ import urllib3
 from aiohttp.base_protocol import BaseProtocol
 from urllib3.connection import HTTPConnection
 
-from lemonfiber import Address, Credential, Read, _sync
+from lemonfiber import Address, Credential, Read
 from lemonfiber._aio import transport
 from lemonfiber._protocol import answers, calls, following, operation, refusals
+from lemonfiber._sync import transport as sync_transport
 from lemonfiber.address import Route
 from lemonfiber.files import PICTURE_MOST
 from lemonfiber.problems import (
@@ -155,7 +156,7 @@ def sent(body: bytes, headers: dict[str, str] | None = None) -> urllib3.HTTPResp
 
 def test_a_capped_answer_that_declares_too_much_is_not_read_and_its_connection_is_closed() -> None:
     response = sent(b"x" * 20, {"content-length": "20"})
-    assert _sync.capped(response, 10) == b""
+    assert sync_transport.capped(response, 10) == b""
     assert response.connection is not None
     assert response.closed
 
@@ -171,7 +172,7 @@ def test_a_capped_answer_is_read_one_byte_past_its_most_and_no_further(
     pooled: bool,
 ) -> None:
     response = sent(body)
-    assert _sync.capped(response, 10) == kept
+    assert sync_transport.capped(response, 10) == kept
     assert (response.connection is None) is pooled
 
 
@@ -279,7 +280,7 @@ def test_a_success_is_a_status_in_the_two_hundreds() -> None:
 
 def only_pool(address: Address) -> urllib3.HTTPConnectionPool:
     """Return the one pool an address with one route is reached through."""
-    [(route, pool)] = _sync.ways_to(address)
+    [(route, pool)] = sync_transport.ways_to(address)
     assert route == address.routes[0]
     return pool
 
@@ -311,7 +312,7 @@ def test_a_name_is_reached_at_each_address_it_resolved_to_and_asked_for_by_name(
     )
     assert address.routes[0].url("/api/status") == "https://[::1]:8443/base/api/status"
     assert address.routes[0].headers() == {"Host": "localhost:8443"}
-    ways = _sync.ways_to(address)
+    ways = sync_transport.ways_to(address)
     for (route, pool), host in zip(ways, ["::1", "127.0.0.1"], strict=True):
         assert isinstance(pool, urllib3.HTTPSConnectionPool)
         assert (route.host, pool.host, pool.assert_hostname, pool.conn_kw["server_hostname"]) == (

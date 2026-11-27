@@ -12,12 +12,24 @@ from typing import TYPE_CHECKING, Final
 from lemonfiber._generated import READS, ActionRequest
 from lemonfiber.files import PICTURE_MOST, PICTURE_TYPES
 from lemonfiber.problems import MisaskedError
-from lemonfiber.reads import ACTIONS, BUNDLE, CAPABILITIES, DEVICE_KEYS, JOBS, KEY_CLAIMS, KEYS, LOGS, SESSION
+from lemonfiber.reads import (
+    ACTIONS,
+    BUNDLE,
+    CAPABILITIES,
+    DEVICE_KEYS,
+    JOBS,
+    KEY_CLAIMS,
+    KEYS,
+    LOGS,
+    PUSH_ENDPOINTS,
+    SESSION,
+)
 
 if TYPE_CHECKING:
     from lemonfiber.credential import Credential
     from lemonfiber.device_keys import Registering
     from lemonfiber.keys import Minting
+    from lemonfiber.push_endpoints import PushEndpointRegistering
     from lemonfiber.reads import Read
 
 type Scalar = str | int | bool
@@ -247,6 +259,32 @@ def device_key_challenge_call(name: str) -> Call:
 def revoke_device_key_call(name: str) -> Call:
     """Revoke one device key, by its name as one path segment."""
     return Call(HTTPMethod.DELETE, device_key_path(name), {"Accept": JSON_TYPE})
+
+
+def register_push_endpoint_call(registering: PushEndpointRegistering) -> Call:
+    """Register a push endpoint with its name, its address, and its WebPush key and secret in base64url."""
+    return posted(
+        PUSH_ENDPOINTS,
+        {
+            "name": registering.name,
+            "endpoint": registering.endpoint,
+            "p256dh": base64url(registering.p256dh),
+            "auth": base64url(registering.auth),
+        },
+    )
+
+
+def push_endpoints_call() -> Call:
+    """Ask for the push endpoints this credential keeps."""
+    return Call(HTTPMethod.GET, PUSH_ENDPOINTS, {"Accept": JSON_TYPE})
+
+
+def remove_push_endpoint_call(name: str) -> Call:
+    """Remove one push endpoint, by its name as one path segment, refusing a name a URL would resolve away."""
+    if name in UNKEPT_SEGMENTS:
+        sentence = "A push endpoint is named by its name, and what was given is not a name that can be sent."
+        raise MisaskedError(sentence, status=HTTPStatus.BAD_REQUEST)
+    return Call(HTTPMethod.DELETE, f"{PUSH_ENDPOINTS}/{segment(name)}", {"Accept": JSON_TYPE})
 
 
 def device_key_path(name: str) -> str:

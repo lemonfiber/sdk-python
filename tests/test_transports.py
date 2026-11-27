@@ -25,7 +25,7 @@ from lemonfiber import (
 )
 from lemonfiber._aio.transport import STRAIGHT
 from lemonfiber._protocol.calls import DEFAULT_TIMEOUT
-from lemonfiber._sync import CHUNK
+from lemonfiber._sync.transport import CHUNK
 from tests.conftest import PRINTED
 from tests.stack import Streamed, event
 
