@@ -113,12 +113,14 @@ instead, made with the SHA-256 of the public key's DER as its client data hash.
 phones the stack wakes on every alert: every one for the operator, a member's own
 for a member's session, and none for a key. The WebPush key and secret are given
 as bytes and sent in base64url. An endpoint's address lets whoever holds it wake
-the phone, so a screen shows its host alone:
+the phone, so once registered it is never answered again: the registration and
+every listed endpoint carry its `host` and a `fingerprint`, the first sixteen
+hexadecimal digits of the SHA-256 of the whole address, instead:
 
 ```python
 client.register_push_endpoint(PushEndpointRegistering("pixel", endpoint, p256dh, auth))
 for one in client.push_endpoints()["data"]["endpoints"]:
-    show(one["name"], urllib.parse.urlsplit(one["endpoint"]).hostname)
+    show(one["name"], f"{one['host']} ({one['fingerprint']})")
 client.remove_push_endpoint("pixel")
 ```
 
