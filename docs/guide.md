@@ -107,6 +107,21 @@ A challenge is good for one mint from the same credential within a minute.
 keys it proved stay, each naming it as `proved_by` in the keys listing. `IosAttestation` carries an App Attest object
 instead, made with the SHA-256 of the public key's DER as its client data hash.
 
+### Phones that are woken
+
+`register_push_endpoint`, `push_endpoints` and `remove_push_endpoint` keep the
+phones the stack wakes on every alert: every one for the operator, a member's own
+for a member's session, and none for a key. The WebPush key and secret are given
+as bytes and sent in base64url. An endpoint's address lets whoever holds it wake
+the phone, so a screen shows its host alone:
+
+```python
+client.register_push_endpoint(PushEndpointRegistering("pixel", endpoint, p256dh, auth))
+for one in client.push_endpoints()["data"]["endpoints"]:
+    show(one["name"], urllib.parse.urlsplit(one["endpoint"]).hostname)
+client.remove_push_endpoint("pixel")
+```
+
 ## Reading
 
 `read` takes a `Read`, one member for each read the contract lists that answers
