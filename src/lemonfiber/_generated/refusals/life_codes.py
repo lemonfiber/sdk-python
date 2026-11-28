@@ -36,6 +36,11 @@ LIFE: typing.Final[typing.Mapping[RefusalCode, ListedRefusal]] = {
         409,
         "Raised where a start would install a part whose install could not be read.",
     ),
+    "LIFE-16": ListedRefusal(
+        "PULL_THROTTLED",
+        503,
+        "Raised when a registry went on refusing an image for its rate limit after every run again of the start, fetch or run that pulls it.",
+    ),
     "LIFE-3": ListedRefusal("ALREADY_WORKING", 409, "Another run is already working on this stack."),
     "LIFE-4": ListedRefusal(
         "REGISTRY_REFUSED", 400, "Fetching images is switched off, so there was nothing to fetch with."
