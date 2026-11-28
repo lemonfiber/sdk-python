@@ -167,6 +167,12 @@
         "why": "A cover is fetched from wherever the curator says it is, so lemonfiber notes each host it fetched one from, and the account of what leaves this machine names them."
       },
       {
+        "at": "/srv/lemonfiber/asking-faults.json",
+        "secret": false,
+        "what": "why a member's search or ask was last not working",
+        "why": "A member is told only that asking isn't working right now, so lemonfiber keeps the code of each cause, how many times and when last, and lemonfiber doctor names them; nothing else about the failure is kept."
+      },
+      {
         "at": "/srv/lemonfiber/notify-backends.json",
         "secret": false,
         "what": "where alerts are delivered",

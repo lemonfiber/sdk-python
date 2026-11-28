@@ -258,6 +258,18 @@
         }
       },
       {
+        "category": "services",
+        "check": "services.household-asking",
+        "origin": {
+          "origin": "bundled"
+        },
+        "title": "Whether the household's searches and asks work",
+        "verdict": {
+          "note": "no member was told asking isn't working in the last day",
+          "outcome": "pass"
+        }
+      },
+      {
         "category": "config",
         "check": "config.claimed",
         "origin": {
