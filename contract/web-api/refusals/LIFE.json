@@ -29,6 +29,11 @@
     "status": 409,
     "description": "Raised where a start would install a part whose install could not be read."
   },
+  "LIFE-16": {
+    "name": "PULL_THROTTLED",
+    "status": 503,
+    "description": "Raised when a registry went on refusing an image for its rate limit after every run again of the start, fetch or run that pulls it."
+  },
   "LIFE-3": {
     "name": "ALREADY_WORKING",
     "status": 409,

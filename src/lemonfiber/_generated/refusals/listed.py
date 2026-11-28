@@ -74,6 +74,7 @@ type RefusalCode = typing.Literal[
     "LIFE-13",
     "LIFE-14",
     "LIFE-15",
+    "LIFE-16",
     "LIFE-3",
     "LIFE-4",
     "MIGRATE-1",
