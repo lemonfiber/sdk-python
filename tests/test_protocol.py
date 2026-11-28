@@ -395,3 +395,27 @@ def test_a_name_a_url_would_resolve_away_is_refused_before_anything_is_sent(
         call(name)
     assert refused.value.sentence == sentence
     assert refused.value.status == HTTPStatus.BAD_REQUEST
+
+
+def test_a_revocation_rehearsed_carries_dry_run_alone_and_one_carried_out_no_body() -> None:
+    for build in (calls.revoke_call, calls.revoke_device_key_call, calls.remove_push_endpoint_call):
+        rehearsed = build("pixel", dry_run=True)
+        assert rehearsed.method == HTTPMethod.DELETE
+        assert json.loads(rehearsed.body or b"") == {"dry_run": True}
+        assert rehearsed.headers == {"Accept": "application/json", "Content-Type": "application/json"}
+        carried_out = build("pixel")
+        assert carried_out.path == rehearsed.path
+        assert carried_out.body is None
+        assert carried_out.headers == {"Accept": "application/json"}
+    assert operation.revoke("ha", dry_run=True).call == calls.revoke_call("ha", dry_run=True)
+    assert operation.revoke_device_key("pixel", dry_run=True).call == calls.revoke_device_key_call(
+        "pixel",
+        dry_run=True,
+    )
+    assert operation.remove_push_endpoint("pixel", dry_run=True).call == calls.remove_push_endpoint_call(
+        "pixel",
+        dry_run=True,
+    )
+    assert operation.revoke("ha").call == calls.revoke_call("ha")
+    assert operation.revoke_device_key("pixel").call == calls.revoke_device_key_call("pixel")
+    assert operation.remove_push_endpoint("pixel").call == calls.remove_push_endpoint_call("pixel")

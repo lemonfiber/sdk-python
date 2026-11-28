@@ -87,6 +87,15 @@ def test_device_keys_are_listed_challenged_and_revoked_by_name(client: Driver, s
     assert client.revoke_device_key("pixel 8") == envelope("device-keys", LISTED)
 
 
+def test_a_device_key_revocation_rehearsed_sends_dry_run(client: Driver, stack: Stack) -> None:
+    answered = Reply(body=envelope("device-keys", LISTED))
+    stack.reply("DELETE", "/api/device-keys/pixel", answered, answered)
+    client.revoke_device_key("pixel")
+    client.revoke_device_key("pixel", dry_run=True)
+    assert not stack.arrived[0].body
+    assert json.loads(stack.arrived[1].body) == {"dry_run": True}
+
+
 def test_a_device_key_answered_as_another_kind_is_refused(client: Driver, stack: Stack) -> None:
     stack.reply("DELETE", "/api/device-keys/pixel", Reply(body=envelope("keys", LISTED)))
     with pytest.raises(UnexpectedKindError):

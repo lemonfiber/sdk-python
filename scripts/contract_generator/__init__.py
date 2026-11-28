@@ -23,6 +23,7 @@ from scripts.contract_generator.artefact import (
     kinds_of,
     reads_of,
     refusals_of,
+    routes_of,
     users_of,
 )
 from scripts.contract_generator.formatting import Formatter
@@ -40,6 +41,7 @@ from scripts.contract_generator.tables import (
     narrowing_module,
     reads_module,
     refusals_modules,
+    routes_module,
 )
 from scripts.contract_generator.vendored import read_artefact
 from scripts.contract_generator.writer import Writer
@@ -74,6 +76,7 @@ def generate(
     callable_by_key = key_callable_of(artefact)
     actions = actions_of(artefact)
     reads = reads_of(artefact)
+    routed = routes_of(artefact)
 
     routes = {one.route: {"$defs": one.definitions} for one in actions}
     writer = Writer(users=users_of({**kinds, **routes}))
@@ -86,6 +89,7 @@ def generate(
         narrowing_module(names),
         key_callable_module(callable_by_key),
         reads_module(reads),
+        routes_module(routed),
         *refusals_modules(refusals),
     ]
     for table in tables:
@@ -120,6 +124,7 @@ def generate(
         ("narrowing",),
         ("reads",),
         REFUSALS_PACKAGE,
+        ("routes",),
     ]
     if body_paths:
         summary = "The request each action is posted with, and the shapes only that action carries."

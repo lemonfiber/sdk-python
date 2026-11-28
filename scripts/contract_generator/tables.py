@@ -5,7 +5,7 @@ import json
 import re
 from typing import TYPE_CHECKING
 
-from scripts.contract_generator.artefact import SPOKEN
+from scripts.contract_generator.artefact import METHODS, SPOKEN
 from scripts.contract_generator.modules import Module, index
 from scripts.contract_generator.refused import refuse
 from scripts.contract_generator.spelling import pascal
@@ -13,7 +13,7 @@ from scripts.contract_generator.spelling import pascal
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
-    from scripts.contract_generator.artefact import ByKey, Served
+    from scripts.contract_generator.artefact import ByKey, Routed, Served
 
 KINDS_PACKAGE = ("kinds",)
 """Where each kind's envelope, and the shapes only it carries, are written."""
@@ -364,4 +364,40 @@ def reads_module(reads: Sequence[Served]) -> Module:
         names,
         {("envelope",): {"Kind"}},
         standard=("enum", "types", "typing"),
+    )
+
+
+def routes_module(routes: Sequence[Routed]) -> Module:
+    """Return the module of every route the web API serves, and what the contract says of each."""
+    body = [
+        "",
+        f"type Method = typing.Literal[{', '.join(json.dumps(method) for method in METHODS)}]",
+        '"""A method a route is served at, as HTTP spells it."""',
+        "",
+        "",
+        "class Route(typing.NamedTuple):",
+        '    """One route the web API serves, as the contract lists it."""',
+        "",
+        "    method: Method",
+        '    """The method it is served at."""',
+        "    path: str",
+        '    """Its path, each segment a caller fills written as `{name}`."""',
+        "    body: bool",
+        '    """Whether it takes a body."""',
+        "    kinds: tuple[Kind, ...]",
+        '    """Every kind it may answer with; none for a route answering with a file."""',
+        "",
+        "",
+        "ROUTES: typing.Final[tuple[Route, ...]] = (",
+    ]
+    for one in routes:
+        kinds = tupled([json.dumps(kind) for kind in one.kinds]) if one.kinds else "()"
+        body.append(f"    Route({json.dumps(one.method)}, {json.dumps(one.path)}, {one.body}, {kinds}),")
+    body.extend([")", '"""Every route the web API serves, in the order the contract lists them."""'])
+    return Module(
+        ("routes",),
+        "Every route the web API serves, by its method and its path, and what the contract says of each.",
+        body,
+        ["ROUTES", "Method", "Route"],
+        {("envelope",): {"Kind"}},
     )

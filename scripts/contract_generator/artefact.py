@@ -49,6 +49,12 @@ CALLABLE_FIELDS = ("action", *CALLABLE_FLAGS, "moved")
 READ_FIELDS = ("path", "parameters", "kinds", "file")
 """Everything the contract says of a read, in that order. Anything else is refused, not dropped."""
 
+ROUTE_FIELDS = ("method", "path", "body", "kinds")
+"""Everything the contract says of a route, in that order. Anything else is refused, not dropped."""
+
+METHODS = ("GET", "POST", "DELETE")
+"""The methods a route is served at, as HTTP spells each."""
+
 PARAMETER_FIELDS = ("name", "repeatable")
 """Everything the contract says of a read's query parameter. Anything else is refused, not dropped."""
 
@@ -252,6 +258,68 @@ def read_served(at: int, entry: object, kinds: frozenset[str]) -> tuple[Served |
     if wrong or not isinstance(path, str):
         return None, wrong
     return Served(path, parameters, tuple(str(kind) for kind in answers), file is True), []
+
+
+@dataclass(frozen=True)
+class Routed:
+    """One route the web API serves, as the contract lists it."""
+
+    method: str
+    path: str
+    body: bool
+    kinds: tuple[str, ...]
+
+
+def read_routed(at: int, entry: object, kinds: frozenset[str]) -> tuple[Routed | None, list[str]]:
+    """Return one route the web API serves, or everything wrong with it as lines naming where it sits."""
+    here = f"route {at}"
+    listed = object_of(entry)
+    if listed is None:
+        return None, [f"{here}: not an object"]
+    method = listed.get("method")
+    path = listed.get("path")
+    body = listed.get("body")
+    answers = array_of(listed.get("kinds"))
+    wrong = unread_fields(here, listed, ROUTE_FIELDS)
+    if method not in METHODS:
+        wrong.append(f"{here}: method {json.dumps(method)} is not one of {', '.join(METHODS)}")
+    if not isinstance(path, str) or not READ_PATH.fullmatch(path):
+        wrong.append(f"{here}: path {json.dumps(path)} is not a route's path")
+    if not isinstance(body, bool):
+        wrong.append(f"{here}: body {json.dumps(body)} is not true or false")
+    if answers is None or not all(isinstance(kind, str) for kind in answers):
+        wrong.append(f"{here}: kinds {json.dumps(listed.get('kinds'))} is not a list of kinds")
+        answers = []
+    wrong.extend(
+        f"{here}: answers with {kind}, which the contract describes no kind as"
+        for kind in answers
+        if kind not in kinds
+    )
+    if wrong or not isinstance(method, str) or not isinstance(path, str):
+        return None, wrong
+    return Routed(method, path, body is True, tuple(str(kind) for kind in answers)), []
+
+
+def routes_of(artefact: Mapping[str, object]) -> list[Routed]:
+    """Return every route the web API serves, in the contract's order, or none for an artefact older than the list."""
+    listed = artefact.get("routes", [])
+    entries = array_of(listed)
+    if entries is None:
+        refuse(f"the vendored contract's routes are {json.dumps(listed)}, and they are a list of routes")
+    kinds = frozenset(kinds_of(artefact))
+    read: list[Routed] = []
+    problems: list[str] = []
+    for at, entry in enumerate(entries):
+        one, wrong = read_routed(at, entry, kinds)
+        problems.extend(wrong)
+        if one is None:
+            continue
+        if (one.method, one.path) in {(routed.method, routed.path) for routed in read}:
+            problems.append(f"route {at}: {one.method} {one.path} is listed twice")
+        read.append(one)
+    if problems:
+        refuse("the vendored contract lists a route this generator cannot write:\n  " + "\n  ".join(problems))
+    return read
 
 
 def checked(artefact: Mapping[str, object], stamp: str) -> None:
