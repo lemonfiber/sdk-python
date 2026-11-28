@@ -248,6 +248,15 @@ def test_a_key_is_revoked_by_its_name_as_one_segment(client: Driver, stack: Stac
     assert client.revoke("home/assistant") == envelope("keys", LISTING)
 
 
+def test_a_key_revocation_rehearsed_sends_dry_run(client: Driver, stack: Stack) -> None:
+    answered = Reply(body=envelope("keys", LISTING))
+    stack.reply("DELETE", "/api/keys/home", answered, answered)
+    client.revoke("home")
+    client.revoke("home", dry_run=True)
+    assert not stack.arrived[0].body
+    assert json.loads(stack.arrived[1].body) == {"dry_run": True}
+
+
 @pytest.mark.parametrize("name", ["", ".", ".."])
 def test_a_name_a_url_would_resolve_away_revokes_nothing(client: Driver, stack: Stack, name: str) -> None:
     with pytest.raises(MisaskedError) as refused:

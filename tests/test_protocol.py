@@ -416,3 +416,6 @@ def test_a_revocation_rehearsed_carries_dry_run_alone_and_one_carried_out_no_bod
         "pixel",
         dry_run=True,
     )
+    assert operation.revoke("ha").call == calls.revoke_call("ha")
+    assert operation.revoke_device_key("pixel").call == calls.revoke_device_key_call("pixel")
+    assert operation.remove_push_endpoint("pixel").call == calls.remove_push_endpoint_call("pixel")

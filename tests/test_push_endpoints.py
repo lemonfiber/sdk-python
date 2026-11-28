@@ -61,6 +61,15 @@ def test_push_endpoints_are_listed_and_removed_by_name_as_the_contract_example_s
     assert client.remove_push_endpoint("a phone") == example("push-endpoints")
 
 
+def test_a_removal_rehearsed_sends_dry_run(client: Driver, stack: Stack) -> None:
+    answered = Reply(body=example("push-endpoints"))
+    stack.reply("DELETE", "/api/push-endpoints/a phone", answered, answered)
+    client.remove_push_endpoint("a phone")
+    client.remove_push_endpoint("a phone", dry_run=True)
+    assert not stack.arrived[0].body
+    assert json.loads(stack.arrived[1].body) == {"dry_run": True}
+
+
 def test_a_push_endpoint_answered_as_another_kind_is_refused(client: Driver, stack: Stack) -> None:
     stack.reply("GET", "/api/push-endpoints", Reply(body=example("push-endpoint")))
     with pytest.raises(UnexpectedKindError):

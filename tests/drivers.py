@@ -179,7 +179,7 @@ class Driver(Protocol):
         """Mint a key as a claim."""
         ...
 
-    def revoke(self, name: str) -> KeysEnvelope:
+    def revoke(self, name: str, **rehearsing: bool) -> KeysEnvelope:
         """Revoke a key."""
         ...
 
@@ -195,7 +195,7 @@ class Driver(Protocol):
         """Ask a challenge for a device key."""
         ...
 
-    def revoke_device_key(self, name: str) -> DeviceKeysEnvelope:
+    def revoke_device_key(self, name: str, **rehearsing: bool) -> DeviceKeysEnvelope:
         """Revoke a device key."""
         ...
 
@@ -207,7 +207,7 @@ class Driver(Protocol):
         """List the push endpoints."""
         ...
 
-    def remove_push_endpoint(self, name: str) -> PushEndpointsEnvelope:
+    def remove_push_endpoint(self, name: str, **rehearsing: bool) -> PushEndpointsEnvelope:
         """Remove a push endpoint."""
         ...
 
@@ -309,9 +309,9 @@ class SyncDriver:
         """Mint a key as a claim."""
         return self.client.mint_claim(minting)
 
-    def revoke(self, name: str) -> KeysEnvelope:
+    def revoke(self, name: str, **rehearsing: bool) -> KeysEnvelope:
         """Revoke a key."""
-        return self.client.revoke(name)
+        return self.client.revoke(name, **rehearsing)
 
     def register_device_key(self, registering: Registering) -> DeviceKeyEnvelope:
         """Register a device key."""
@@ -325,9 +325,9 @@ class SyncDriver:
         """Ask a challenge for a device key."""
         return self.client.device_key_challenge(name)
 
-    def revoke_device_key(self, name: str) -> DeviceKeysEnvelope:
+    def revoke_device_key(self, name: str, **rehearsing: bool) -> DeviceKeysEnvelope:
         """Revoke a device key."""
-        return self.client.revoke_device_key(name)
+        return self.client.revoke_device_key(name, **rehearsing)
 
     def register_push_endpoint(self, registering: PushEndpointRegistering) -> PushEndpointEnvelope:
         """Register a push endpoint."""
@@ -337,9 +337,9 @@ class SyncDriver:
         """List the push endpoints."""
         return self.client.push_endpoints()
 
-    def remove_push_endpoint(self, name: str) -> PushEndpointsEnvelope:
+    def remove_push_endpoint(self, name: str, **rehearsing: bool) -> PushEndpointsEnvelope:
         """Remove a push endpoint."""
-        return self.client.remove_push_endpoint(name)
+        return self.client.remove_push_endpoint(name, **rehearsing)
 
     def job(self, job: str) -> JobStanding:
         """Ask about a job."""
@@ -452,9 +452,9 @@ class AsyncDriver:
         """Mint a key as a claim."""
         return self.run(self.client.mint_claim(minting))
 
-    def revoke(self, name: str) -> KeysEnvelope:
+    def revoke(self, name: str, **rehearsing: bool) -> KeysEnvelope:
         """Revoke a key."""
-        return self.run(self.client.revoke(name))
+        return self.run(self.client.revoke(name, **rehearsing))
 
     def register_device_key(self, registering: Registering) -> DeviceKeyEnvelope:
         """Register a device key."""
@@ -468,9 +468,9 @@ class AsyncDriver:
         """Ask a challenge for a device key."""
         return self.run(self.client.device_key_challenge(name))
 
-    def revoke_device_key(self, name: str) -> DeviceKeysEnvelope:
+    def revoke_device_key(self, name: str, **rehearsing: bool) -> DeviceKeysEnvelope:
         """Revoke a device key."""
-        return self.run(self.client.revoke_device_key(name))
+        return self.run(self.client.revoke_device_key(name, **rehearsing))
 
     def register_push_endpoint(self, registering: PushEndpointRegistering) -> PushEndpointEnvelope:
         """Register a push endpoint."""
@@ -480,9 +480,9 @@ class AsyncDriver:
         """List the push endpoints."""
         return self.run(self.client.push_endpoints())
 
-    def remove_push_endpoint(self, name: str) -> PushEndpointsEnvelope:
+    def remove_push_endpoint(self, name: str, **rehearsing: bool) -> PushEndpointsEnvelope:
         """Remove a push endpoint."""
-        return self.run(self.client.remove_push_endpoint(name))
+        return self.run(self.client.remove_push_endpoint(name, **rehearsing))
 
     def job(self, job: str) -> JobStanding:
         """Ask about a job."""
