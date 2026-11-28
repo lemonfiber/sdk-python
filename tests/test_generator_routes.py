@@ -25,11 +25,12 @@ def test_the_routes_are_generated_in_the_contracts_order_with_what_each_takes(tm
         routed("POST", "/api/keys", body=True),
     ]
     module = generated(tmp_path, {**artefact(PULL), "routes": listed})
-    assert (
+    routes = module.ROUTES
+    assert routes == (
         module.Route("DELETE", "/api/keys/{name}", body=True, kinds=("pull",)),
         module.Route("GET", "/api/bundle/{name}", body=False, kinds=()),
         module.Route("POST", "/api/keys", body=True, kinds=("pull",)),
-    ) == module.ROUTES
+    )
 
 
 def test_an_artefact_older_than_the_routes_generates_none(tmp_path: pathlib.Path) -> None:
