@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "What kind of title a curator files, a member asks for and a media server holds: a\nseries, a film, music, books, an audiobook or a podcast.",
+  "description": "What kind of title a curator files, a member asks for and a media server holds: a\nseries, a film, music, books, a comic, an audiobook or a podcast.",
   "oneOf": [
     {
       "description": "A series.",
@@ -21,6 +21,11 @@
       "description": "A book, or a whole author or series of books asked for.",
       "type": "string",
       "const": "books"
+    },
+    {
+      "description": "A comic, or a whole series of comics.",
+      "type": "string",
+      "const": "comics"
     },
     {
       "description": "An audiobook.",
