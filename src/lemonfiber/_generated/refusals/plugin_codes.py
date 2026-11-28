@@ -198,6 +198,11 @@ PLUGIN: typing.Final[typing.Mapping[RefusalCode, ListedRefusal]] = {
     "PLUGIN-52": ListedRefusal(
         "UNDECLARED_FORM", 400, "Raised when a plugin's manifest names a form the stack does not declare."
     ),
+    "PLUGIN-53": ListedRefusal(
+        "UNCLAIMED_RECIPE",
+        400,
+        "Raised when a recipe runs on claim in a plugin none of whose services speaks `owner.claim@1`; the manifest's every other fault is listed beside it.",
+    ),
     "PLUGIN-6": ListedRefusal(
         "NOWHERE", 500, "There is no stack on this machine to put a plugin's container in."
     ),
